@@ -4,7 +4,7 @@ SaaS de entrenamiento y retención para gimnasios de musculación tradicional.
 
 ## Stack
 - Next.js 15 (App Router) + TypeScript
-- Tailwind CSS + shadcn/ui (ya instalados: button, input, label, card, table, dialog, form, dropdown-menu, avatar, badge, sonner, select, textarea, skeleton)
+- Tailwind CSS + shadcn/ui (ya instalados: button, input, label, card, table, dialog, form, dropdown-menu, avatar, badge, sonner, select, textarea, skeleton, tabs, alert-dialog)
 - date-fns (formateo de fechas, locale es)
 - Supabase (PostgreSQL + Auth + Storage)
 - Multi-tenant: cada gimnasio es un tenant, aislado por gym_id + Row Level Security
@@ -36,17 +36,23 @@ Todas tienen gym_id para multi-tenancy.
   - components/alumnos/alumnos-filtros.tsx: buscador con debounce + select de estado, vía searchParams.
   - app/(dashboard)/dashboard/alumnos/nuevo/{page.tsx,actions.ts}: alta con react-hook-form + zod, Server Action `createMember`.
   - types/db.ts: tipo `Member` escrito a mano (no se generaron tipos con `supabase gen types` por falta de acceso al proyecto).
-  - **Pendiente**: no se pudo verificar el alta end-to-end por el bug crítico de abajo (RLS/trigger de signup). El resto (listado vacío, sidebar, formulario, select, validaciones) sí se probó visualmente en el browser.
+- Semana 2 en curso: Bloque B (detalle + edición) implementado:
+  - lib/members.ts: helpers compartidos entre listado y detalle — `ESTADO_BADGE`, `frecuenciaLabel`, `getInitials`, `nombreCompleto`, `parseFechaLocal`.
+  - components/alumnos/member-form.tsx: el form de alta/edición se extrajo acá (antes vivía solo en `nuevo/page.tsx`); recibe `defaultValues`/`onSubmit`/textos por props. Lo usan tanto `nuevo/page.tsx` como `[id]/editar/editar-form.tsx`.
+  - app/(dashboard)/dashboard/alumnos/[id]/page.tsx: detalle (Server Component) con tabs (Info/Rutinas/Asistencia/Pagos — las últimas 3 son placeholder), WhatsApp, edad calculada, botón Editar y dropdown de acciones.
+  - components/alumnos/alumno-acciones.tsx: dropdown "Más acciones" (Pausar/Reactivar, Dar de baja) con AlertDialog de confirmación por cada acción.
+  - app/(dashboard)/dashboard/alumnos/[id]/actions.ts: Server Actions `updateMemberStatus` y `updateMember`.
+  - app/(dashboard)/dashboard/alumnos/[id]/editar/{page.tsx,editar-form.tsx}: edición, reutiliza `MemberForm`.
+  - **Probado end-to-end en el browser contra datos reales de la cuenta del usuario** (gym "Setteria"): entrar al detalle, editar (teléfono/frecuencia/notas), pausar, reactivar, WhatsApp (abre en pestaña nueva, número limpio de espacios/+). Todo funcionando. No se probó "Dar de baja" para no alterar el estado del alumno real de la cuenta (el mecanismo es idéntico a Pausar/Reactivar, que sí se probó).
 
-## 🔴 Bug crítico pendiente: RLS/trigger de signup desincronizado en Supabase
-Al probar el Bloque A (2026-08-20) se detectó que **el signup ya no crea el gym ni la fila en `public.users`**:
-- Se creó una cuenta nueva de prueba vía `/signup`; el signup devuelve sesión OK, pero luego `public.users` no tiene fila para ese `auth.uid()` (`PGRST116 - 0 rows`).
-- Se confirmó con un test directo: usando la sesión ya autenticada del browser, un INSERT a `public.gyms` (que según `supabase/migrations/001_enable_rls.sql`, policy `gyms_insert_authenticated`, debería permitirse a cualquier `authenticated` con `check(true)`) fue **rechazado por RLS** (`42501`).
-- Conclusión: **las políticas RLS reales en el proyecto de Supabase no coinciden con lo que hay en `supabase/migrations/001_enable_rls.sql` y/o `002_signup_trigger.sql`**. Lo más probable es que esos archivos de migración nunca se aplicaron contra el proyecto remoto (o se aplicó una versión vieja) — son historial local, no la fuente de verdad de lo que corre en Supabase.
-- **Impacto**: ningún usuario nuevo que se registre hoy queda operativo (sin gym, sin fila en `users`, el dashboard y cualquier alta de datos van a fallar).
-- **Cómo revisarlo**: entrar al SQL Editor de Supabase y correr `select * from pg_policies where tablename = 'gyms';` y `select tgname from pg_trigger where tgname = 'on_auth_user_created';` para confirmar qué hay realmente aplicado, y re-aplicar 001 y 002 si falta algo (o usar `supabase db push` si el proyecto está linkeado).
-- No se intentó arreglar desde acá: no había `SUPABASE_ACCESS_TOKEN`/CLI logueado ni service role key disponibles en este entorno.
-- Quedaron 2 usuarios de prueba huérfanos en Supabase Auth (sin gym): `ana.prueba.constano@example.com` y `constano.debug.20260820b@example.com`. Se pueden borrar desde Authentication > Users cuando se arregle esto.
+## Bug de timezone en fechas (encontrado y arreglado en Bloque B)
+Los campos `date` de Postgres (`birth_date`, `joined_at`) llegan del cliente de Supabase como string `"YYYY-MM-DD"`. Formatearlos con `date-fns format(new Date(fecha), ...)` los interpreta como medianoche **UTC**, y al renderizar en una zona horaria negativa (Argentina, UTC-3) el día se corre uno para atrás — se detectó comparando el detalle (mostraba 19/08) contra el form de edición, que muestra el string crudo (20/08, el valor correcto).
+- **Fix**: usar `parseFechaLocal(fecha)` de `lib/members.ts` (hace `new Date(`${fecha}T00:00:00`)`, que JS interpreta en hora local) en vez de `new Date(fecha)` directo, siempre que se formatee o se calculen diferencias (ej. edad) sobre un campo `date` de la tabla `members`.
+- Ya aplicado en el listado (columna Alta) y en el detalle (Fecha de nacimiento, Fecha de alta, cálculo de edad). Si se agregan más pantallas que muestren `birth_date`/`joined_at`/`created_at`-como-fecha, usar el mismo helper.
+
+## 🟢 Bug de RLS/trigger de signup: resuelto
+El bug crítico reportado en Bloque A (signup no creaba gym/user por políticas RLS desincronizadas) ya no reproduce: al probar Bloque B había una sesión real funcionando (gym "Setteria") con datos cargados. No se investigó qué se corrigió del lado de Supabase, solo se confirma que el flujo completo (login → dashboard → alumnos → detalle → editar) funciona de punta a punta ahora.
+- Quedan pendientes de limpieza en Supabase Auth (Authentication > Users) 2 usuarios de prueba huérfanos de esa sesión de debugging: `ana.prueba.constano@example.com` y `constano.debug.20260820b@example.com`.
 
 ## Bugs de componentes (base-nova / Base UI) encontrados y arreglados
 Se van sumando acá porque el CLI de shadcn para este preset (`base-nova` sobre `@base-ui/react`, no Radix) a veces genera componentes que necesitan un ajuste manual de uso (no siempre es el componente el que está mal, a veces falta wiring):

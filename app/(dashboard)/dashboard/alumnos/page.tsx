@@ -5,6 +5,13 @@ import { es } from "date-fns/locale";
 
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
+import {
+  ESTADO_BADGE,
+  frecuenciaLabel,
+  getInitials,
+  nombreCompleto,
+  parseFechaLocal,
+} from "@/lib/members";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,33 +31,8 @@ const PAGE_SIZE = 20;
 
 const ESTADOS_VALIDOS: MemberStatus[] = ["active", "paused", "inactive"];
 
-const ESTADO_BADGE: Record<MemberStatus, { label: string; className: string }> = {
-  active: {
-    label: "Activo",
-    className: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  },
-  paused: {
-    label: "Pausado",
-    className: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  },
-  inactive: {
-    label: "Inactivo",
-    className: "border-transparent bg-muted text-muted-foreground",
-  },
-};
-
 function escapeForOr(value: string) {
   return value.replace(/[%,()]/g, (char) => `\\${char}`);
-}
-
-function getInitials(firstName: string, lastName: string | null) {
-  const first = firstName.trim()[0] ?? "";
-  const last = lastName?.trim()[0] ?? "";
-  return `${first}${last}`.toUpperCase() || "?";
-}
-
-function frecuenciaLabel(frequency: number | null) {
-  return frequency ? `${frequency}x/sem` : "Libre";
 }
 
 type PageProps = {
@@ -156,9 +138,7 @@ export default async function AlumnosPage({ searchParams }: PageProps) {
                   </TableRow>
                 ) : (
                   alumnos.map((alumno) => {
-                    const nombreCompleto = [alumno.first_name, alumno.last_name]
-                      .filter(Boolean)
-                      .join(" ");
+                    const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
                     const badge = ESTADO_BADGE[alumno.status];
 
                     return (
@@ -166,7 +146,7 @@ export default async function AlumnosPage({ searchParams }: PageProps) {
                         <TableCell>
                           <Avatar size="sm">
                             {alumno.photo_url && (
-                              <AvatarImage src={alumno.photo_url} alt={nombreCompleto} />
+                              <AvatarImage src={alumno.photo_url} alt={nombre} />
                             )}
                             <AvatarFallback>
                               {getInitials(alumno.first_name, alumno.last_name)}
@@ -174,7 +154,7 @@ export default async function AlumnosPage({ searchParams }: PageProps) {
                           </Avatar>
                         </TableCell>
                         <TableCell className="font-medium text-foreground">
-                          {nombreCompleto}
+                          {nombre}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {alumno.phone || "—"}
@@ -186,7 +166,7 @@ export default async function AlumnosPage({ searchParams }: PageProps) {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {format(new Date(alumno.joined_at), "dd/MM/yyyy", { locale: es })}
+                          {format(parseFechaLocal(alumno.joined_at), "dd/MM/yyyy", { locale: es })}
                         </TableCell>
                         <TableCell>
                           <Link

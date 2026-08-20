@@ -1,0 +1,185 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { MessageCircleIcon, PencilIcon } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+
+import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
+import {
+  ESTADO_BADGE,
+  frecuenciaLabel,
+  getInitials,
+  nombreCompleto,
+  parseFechaLocal,
+} from "@/lib/members";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AlumnoAcciones } from "@/components/alumnos/alumno-acciones";
+import type { Member } from "@/types/db";
+
+function calcularEdad(birthDate: string | null) {
+  if (!birthDate) return null;
+
+  const hoy = new Date();
+  const nacimiento = parseFechaLocal(birthDate);
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const mes = hoy.getMonth() - nacimiento.getMonth();
+  if (mes < 0 || (mes === 0 && hoy.getDate() < nacimiento.getDate())) {
+    edad--;
+  }
+  return edad;
+}
+
+function whatsappHref(phone: string) {
+  return `https://wa.me/${phone.replace(/[^\d]/g, "")}`;
+}
+
+type PageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function AlumnoDetallePage({ params }: PageProps) {
+  const { id } = await params;
+  const supabase = await createClient();
+
+  const { data: member } = await supabase.from("members").select("*").eq("id", id).single();
+
+  if (!member) {
+    notFound();
+  }
+
+  const alumno = member as Member;
+  const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
+  const badge = ESTADO_BADGE[alumno.status];
+  const edad = calcularEdad(alumno.birth_date);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-4">
+          <Avatar size="lg" className="!size-16">
+            {alumno.photo_url && <AvatarImage src={alumno.photo_url} alt={nombre} />}
+            <AvatarFallback className="text-lg">
+              {getInitials(alumno.first_name, alumno.last_name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight">{nombre}</h1>
+              <Badge variant="outline" className={cn(badge.className)}>
+                {badge.label}
+              </Badge>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {[edad !== null ? `${edad} años` : null, frecuenciaLabel(alumno.weekly_frequency)]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+            {alumno.phone && (
+              <div className="flex items-center gap-3">
+                <a href={`tel:${alumno.phone}`} className="text-sm text-foreground hover:underline">
+                  {alumno.phone}
+                </a>
+                <a
+                  href={whatsappHref(alumno.phone)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                >
+                  <MessageCircleIcon className="size-4" />
+                  WhatsApp
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={`/dashboard/alumnos/${alumno.id}/editar`} />}
+          >
+            <PencilIcon />
+            Editar
+          </Button>
+          <AlumnoAcciones member={alumno} />
+        </div>
+      </div>
+
+      <Tabs defaultValue="info">
+        <TabsList>
+          <TabsTrigger value="info">Info</TabsTrigger>
+          <TabsTrigger value="rutinas">Rutinas</TabsTrigger>
+          <TabsTrigger value="asistencia">Asistencia</TabsTrigger>
+          <TabsTrigger value="pagos">Pagos</TabsTrigger>
+        </TabsList>
+        <TabsContent value="info">
+          <Card>
+            <CardContent className="grid gap-4 py-4 sm:grid-cols-2">
+              <InfoField label="Nombre completo" value={nombre} />
+              <InfoField
+                label="Fecha de nacimiento"
+                value={
+                  alumno.birth_date
+                    ? format(parseFechaLocal(alumno.birth_date), "dd/MM/yyyy", { locale: es })
+                    : "No cargada"
+                }
+              />
+              <InfoField label="Teléfono" value={alumno.phone || "—"} />
+              <InfoField label="Email" value={alumno.email || "—"} />
+              <InfoField
+                label="Fecha de alta"
+                value={format(parseFechaLocal(alumno.joined_at), "dd/MM/yyyy", { locale: es })}
+              />
+              <InfoField label="Frecuencia semanal" value={frecuenciaLabel(alumno.weekly_frequency)} />
+              <InfoField label="Estado" value={badge.label} />
+              {alumno.notes && (
+                <InfoField label="Notas" value={alumno.notes} className="whitespace-pre-wrap sm:col-span-2" />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="rutinas">
+          <PlaceholderTab text="Próximamente - Semana 6" />
+        </TabsContent>
+        <TabsContent value="asistencia">
+          <PlaceholderTab text="Próximamente - Semana 5" />
+        </TabsContent>
+        <TabsContent value="pagos">
+          <PlaceholderTab text="Próximamente - Semana 4" />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function InfoField({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col gap-1", className)}>
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-sm text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function PlaceholderTab({ text }: { text: string }) {
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-center py-16 text-center text-muted-foreground">
+        {text}
+      </CardContent>
+    </Card>
+  );
+}
