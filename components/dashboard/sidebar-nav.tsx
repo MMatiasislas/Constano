@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboardIcon,
   UsersIcon,
+  LibraryIcon,
   DumbbellIcon,
   HeartPulseIcon,
   CreditCardIcon,
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboardIcon },
   { href: "/dashboard/alumnos", label: "Alumnos", icon: UsersIcon },
+  { href: "/dashboard/ejercicios", label: "Ejercicios", icon: LibraryIcon },
   { href: "/dashboard/rutinas", label: "Rutinas", icon: DumbbellIcon },
   { href: "/dashboard/retencion", label: "Retención", icon: HeartPulseIcon },
   { href: "/dashboard/pagos", label: "Pagos", icon: CreditCardIcon },
