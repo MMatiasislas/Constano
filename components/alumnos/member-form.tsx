@@ -38,6 +38,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PhotoUpload } from "@/components/alumnos/photo-upload";
+
+export type PhotoChange = { file: File | null; removed: boolean };
 
 type MemberFormProps = {
   title: string;
@@ -47,7 +50,11 @@ type MemberFormProps = {
   submitLabel: string;
   submitLoadingLabel: string;
   defaultValues: MemberFormValues;
-  onSubmit: (values: MemberFormValues) => Promise<{ error?: string } | void>;
+  initialPhotoUrl: string | null;
+  onSubmit: (
+    values: MemberFormValues,
+    photo: PhotoChange
+  ) => Promise<{ error?: string } | void>;
 };
 
 export function MemberForm({
@@ -58,9 +65,11 @@ export function MemberForm({
   submitLabel,
   submitLoadingLabel,
   defaultValues,
+  initialPhotoUrl,
   onSubmit,
 }: MemberFormProps) {
   const [loading, setLoading] = useState(false);
+  const [photo, setPhoto] = useState<PhotoChange>({ file: null, removed: false });
 
   const form = useForm<MemberFormValues>({
     resolver: zodResolver(memberFormSchema),
@@ -69,7 +78,7 @@ export function MemberForm({
 
   async function handleSubmit(values: MemberFormValues) {
     setLoading(true);
-    const result = await onSubmit(values);
+    const result = await onSubmit(values, photo);
 
     if (result?.error) {
       toast.error(errorTitle, { description: result.error });
@@ -96,6 +105,14 @@ export function MemberForm({
       <Form {...form}>
         <form onSubmit={form.handleSubmit(handleSubmit)}>
           <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <PhotoUpload
+                initialPhotoUrl={initialPhotoUrl}
+                firstName={defaultValues.first_name}
+                lastName={defaultValues.last_name ?? ""}
+                onChange={(file, removed) => setPhoto({ file, removed })}
+              />
+            </div>
             <FormField
               control={form.control}
               name="first_name"

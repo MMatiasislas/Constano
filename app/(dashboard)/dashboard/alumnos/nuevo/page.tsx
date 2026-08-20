@@ -5,17 +5,21 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 
 import { createMember } from "./actions";
-import { MemberForm } from "@/components/alumnos/member-form";
+import { MemberForm, type PhotoChange } from "@/components/alumnos/member-form";
 import type { MemberFormValues } from "@/lib/validations/member";
 
 export default function NuevoAlumnoPage() {
   const router = useRouter();
 
-  async function handleSubmit(values: MemberFormValues) {
-    const result = await createMember(values);
+  async function handleSubmit(values: MemberFormValues, photo: PhotoChange) {
+    const result = await createMember(values, photo.file);
     if (result?.error) return result;
 
-    toast.success("Alumno creado con éxito");
+    if (result?.warning) {
+      toast.warning("Alumno creado", { description: result.warning });
+    } else {
+      toast.success("Alumno creado con éxito");
+    }
     router.push("/dashboard/alumnos");
     router.refresh();
   }
@@ -29,6 +33,7 @@ export default function NuevoAlumnoPage() {
         cancelHref="/dashboard/alumnos"
         submitLabel="Crear alumno"
         submitLoadingLabel="Creando..."
+        initialPhotoUrl={null}
         defaultValues={{
           first_name: "",
           last_name: "",
