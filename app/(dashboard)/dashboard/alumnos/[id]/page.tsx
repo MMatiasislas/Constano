@@ -19,7 +19,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlumnoAcciones } from "@/components/alumnos/alumno-acciones";
-import type { Member } from "@/types/db";
+import { NuevaRutinaDialog } from "@/components/rutinas/nueva-rutina-dialog";
+import { RutinaAcciones } from "@/components/rutinas/rutina-acciones";
+import type { Member, RoutineWithDayCount } from "@/types/db";
 
 function calcularEdad(birthDate: string | null) {
   if (!birthDate) return null;
@@ -46,11 +48,20 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const { data: member } = await supabase.from("members").select("*").eq("id", id).single();
+  const [{ data: member }, { data: routinesData }] = await Promise.all([
+    supabase.from("members").select("*").eq("id", id).single(),
+    supabase
+      .from("routines")
+      .select("*, routine_days(count)")
+      .eq("member_id", id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (!member) {
     notFound();
   }
+
+  const routinas = (routinesData ?? []) as RoutineWithDayCount[];
 
   const alumno = member as Member;
   const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
@@ -144,7 +155,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
           </Card>
         </TabsContent>
         <TabsContent value="rutinas">
-          <PlaceholderTab text="Próximamente - Semana 6" />
+          <RutinasTabContent memberId={alumno.id} routinas={routinas} />
         </TabsContent>
         <TabsContent value="asistencia">
           <PlaceholderTab text="Próximamente - Semana 5" />
@@ -170,6 +181,71 @@ function InfoField({
     <div className={cn("flex flex-col gap-1", className)}>
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-sm text-foreground">{value}</span>
+    </div>
+  );
+}
+
+function RutinasTabContent({
+  memberId,
+  routinas,
+}: {
+  memberId: string;
+  routinas: RoutineWithDayCount[];
+}) {
+  if (routinas.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+          <p className="text-muted-foreground">Este alumno todavía no tiene rutinas asignadas.</p>
+          <NuevaRutinaDialog memberId={memberId} triggerLabel="Crear la primera" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <NuevaRutinaDialog memberId={memberId} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {routinas.map((routine) => {
+          const cantidadDias = routine.routine_days[0]?.count ?? 0;
+          return (
+            <Card key={routine.id}>
+              <CardContent className="flex flex-col gap-3 py-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium text-foreground">{routine.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {format(parseFechaLocal(routine.created_at.slice(0, 10)), "dd/MM/yyyy", {
+                        locale: es,
+                      })}
+                      {" · "}
+                      {cantidadDias} {cantidadDias === 1 ? "día" : "días"}
+                    </span>
+                  </div>
+                  <RutinaAcciones routine={routine} memberId={memberId} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    nativeButton={false}
+                    render={<Link href={`/dashboard/alumnos/${memberId}/rutinas/${routine.id}`} />}
+                  >
+                    Ver rutina
+                  </Button>
+                  <span title="Próximamente">
+                    <Button size="sm" variant="outline" disabled>
+                      Duplicar
+                    </Button>
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }
