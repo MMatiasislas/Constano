@@ -73,6 +73,50 @@ export type RoutineWithDays = Routine & { routine_days: RoutineDay[] };
 
 export type RoutineDayWithExercises = RoutineDay & { routine_exercises: RoutineExercise[] };
 
+export type RoutineTemplate = {
+  id: string;
+  gym_id: string;
+  name: string;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type RoutineTemplateDay = {
+  id: string;
+  template_id: string;
+  day_number: number;
+  name: string;
+  order_index: number;
+};
+
+export type RoutineTemplateExercise = {
+  id: string;
+  template_day_id: string;
+  name: string;
+  sets: number | null;
+  reps: string | null;
+  weight: number | null;
+  rest_seconds: number | null;
+  notes: string | null;
+  order_index: number;
+  muscle_group: string | null;
+};
+
+export type TemplateWithCounts = RoutineTemplate & {
+  routine_template_days: { id: string; routine_template_exercises: { count: number }[] }[];
+};
+
+export type TemplateWithDays = RoutineTemplate & { routine_template_days: RoutineTemplateDay[] };
+
+export type TemplateDayWithExercises = RoutineTemplateDay & {
+  routine_template_exercises: RoutineTemplateExercise[];
+};
+
+export type TemplateWithDaysAndExercises = RoutineTemplate & {
+  routine_template_days: TemplateDayWithExercises[];
+};
+
 export type MemberStatus = "active" | "paused" | "inactive";
 
 export type Member = {

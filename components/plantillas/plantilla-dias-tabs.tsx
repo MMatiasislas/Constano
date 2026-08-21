@@ -4,20 +4,18 @@ import { useState } from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AgregarDiaDialog } from "./agregar-dia-dialog";
-import { RenombrarDiaDialog } from "./renombrar-dia-dialog";
-import { EliminarDiaDialog } from "./eliminar-dia-dialog";
-import { EditorEjerciciosDia } from "./editor-ejercicios-dia";
-import type { RoutineDayWithExercises } from "@/types/db";
+import { EditorEjerciciosDia } from "@/components/rutinas/editor-ejercicios-dia";
+import { AgregarDiaPlantillaDialog } from "./agregar-dia-plantilla-dialog";
+import { RenombrarDiaPlantillaDialog } from "./renombrar-dia-plantilla-dialog";
+import { EliminarDiaPlantillaDialog } from "./eliminar-dia-plantilla-dialog";
+import type { TemplateDayWithExercises } from "@/types/db";
 
-export function RutinaDiasTabs({
-  routineId,
-  memberId,
+export function PlantillaDiasTabs({
+  templateId,
   days,
 }: {
-  routineId: string;
-  memberId: string;
-  days: RoutineDayWithExercises[];
+  templateId: string;
+  days: TemplateDayWithExercises[];
 }) {
   const [activeDayId, setActiveDayId] = useState<string | undefined>(days[0]?.id);
   const resolvedActiveDayId = days.some((day) => day.id === activeDayId)
@@ -28,8 +26,8 @@ export function RutinaDiasTabs({
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-          <p className="text-muted-foreground">Todavía no hay días en esta rutina.</p>
-          <AgregarDiaDialog routineId={routineId} memberId={memberId} onDayAdded={setActiveDayId} />
+          <p className="text-muted-foreground">Todavía no hay días en esta plantilla.</p>
+          <AgregarDiaPlantillaDialog templateId={templateId} onDayAdded={setActiveDayId} />
         </CardContent>
       </Card>
     );
@@ -46,7 +44,7 @@ export function RutinaDiasTabs({
             </TabsTrigger>
           ))}
         </TabsList>
-        <AgregarDiaDialog routineId={routineId} memberId={memberId} onDayAdded={setActiveDayId} />
+        <AgregarDiaPlantillaDialog templateId={templateId} onDayAdded={setActiveDayId} />
       </div>
       {days.map((day) => (
         <TabsContent key={day.id} value={day.id}>
@@ -57,11 +55,15 @@ export function RutinaDiasTabs({
                 <span className="text-xs text-muted-foreground">Día {day.day_number}</span>
               </div>
               <div className="flex items-center gap-2">
-                <RenombrarDiaDialog day={day} memberId={memberId} />
-                <EliminarDiaDialog day={day} memberId={memberId} />
+                <RenombrarDiaPlantillaDialog day={day} templateId={templateId} />
+                <EliminarDiaPlantillaDialog day={day} templateId={templateId} />
               </div>
             </div>
-            <EditorEjerciciosDia context="routine" dayId={day.id} ejercicios={day.routine_exercises} />
+            <EditorEjerciciosDia
+              context="template"
+              dayId={day.id}
+              ejercicios={day.routine_template_exercises}
+            />
           </div>
         </TabsContent>
       ))}

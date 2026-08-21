@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlumnoAcciones } from "@/components/alumnos/alumno-acciones";
 import { NuevaRutinaDialog } from "@/components/rutinas/nueva-rutina-dialog";
 import { RutinaAcciones } from "@/components/rutinas/rutina-acciones";
+import { DuplicarRutinaDialog } from "@/components/rutinas/duplicar-rutina-dialog";
 import type { Member, RoutineWithDayCount } from "@/types/db";
 
 function calcularEdad(birthDate: string | null) {
@@ -235,11 +236,7 @@ function RutinasTabContent({
                   >
                     Ver rutina
                   </Button>
-                  <span title="Próximamente">
-                    <Button size="sm" variant="outline" disabled>
-                      Duplicar
-                    </Button>
-                  </span>
+                  <DuplicarRutinaDialog routine={routine} memberId={memberId} />
                 </div>
               </CardContent>
             </Card>

@@ -23,6 +23,10 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { deleteExercise, reorderExercises } from "@/app/(dashboard)/dashboard/alumnos/[id]/rutinas/[routineId]/actions";
+import {
+  deleteTemplateExercise,
+  reorderTemplateExercises,
+} from "@/app/(dashboard)/dashboard/rutinas/plantillas/[templateId]/actions";
 import { cn } from "@/lib/utils";
 import { muscleGroupBadgeClass } from "@/lib/exercises";
 import { Button } from "@/components/ui/button";
@@ -41,9 +45,32 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AgregarEjercicioDialog } from "./agregar-ejercicio-dialog";
 import { EditarEjercicioDialog } from "./editar-ejercicio-dialog";
-import type { RoutineExercise } from "@/types/db";
 
-function detalleEjercicio(exercise: RoutineExercise) {
+export type EjercicioEditorContext = "routine" | "template";
+
+export type EjercicioComun = {
+  id: string;
+  name: string;
+  sets: number | null;
+  reps: string | null;
+  weight: number | null;
+  rest_seconds: number | null;
+  notes: string | null;
+  order_index: number;
+  muscle_group: string | null;
+};
+
+const deleteActions = {
+  routine: deleteExercise,
+  template: deleteTemplateExercise,
+};
+
+const reorderActions = {
+  routine: reorderExercises,
+  template: reorderTemplateExercises,
+};
+
+function detalleEjercicio(exercise: EjercicioComun) {
   const seriesReps = [
     exercise.sets ? `${exercise.sets} series` : null,
     exercise.reps ? `${exercise.reps} reps` : null,
@@ -60,11 +87,13 @@ function detalleEjercicio(exercise: RoutineExercise) {
 }
 
 export function EditorEjerciciosDia({
-  routineDayId,
+  context,
+  dayId,
   ejercicios,
 }: {
-  routineDayId: string;
-  ejercicios: RoutineExercise[];
+  context: EjercicioEditorContext;
+  dayId: string;
+  ejercicios: EjercicioComun[];
 }) {
   const router = useRouter();
   const [prevEjercicios, setPrevEjercicios] = useState(ejercicios);
@@ -92,8 +121,8 @@ export function EditorEjerciciosDia({
     const reordered = arrayMove(items, oldIndex, newIndex);
     setItems(reordered);
 
-    const result = await reorderExercises(
-      routineDayId,
+    const result = await reorderActions[context](
+      dayId,
       reordered.map((item) => item.id)
     );
 
@@ -114,7 +143,7 @@ export function EditorEjerciciosDia({
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
             <p className="text-muted-foreground">Este día todavía no tiene ejercicios.</p>
-            <AgregarEjercicioDialog routineDayId={routineDayId} />
+            <AgregarEjercicioDialog context={context} dayId={dayId} />
           </CardContent>
         </Card>
       </div>
@@ -124,7 +153,7 @@ export function EditorEjerciciosDia({
   return (
     <div className="flex flex-col gap-3">
       <DndContext
-        id={`routine-day-${routineDayId}`}
+        id={`${context}-day-${dayId}`}
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
@@ -134,6 +163,7 @@ export function EditorEjerciciosDia({
             {items.map((exercise) => (
               <SortableExerciseCard
                 key={exercise.id}
+                context={context}
                 exercise={exercise}
                 onDeleted={handleDeleted}
               />
@@ -141,16 +171,18 @@ export function EditorEjerciciosDia({
           </div>
         </SortableContext>
       </DndContext>
-      <AgregarEjercicioDialog routineDayId={routineDayId} />
+      <AgregarEjercicioDialog context={context} dayId={dayId} />
     </div>
   );
 }
 
 function SortableExerciseCard({
+  context,
   exercise,
   onDeleted,
 }: {
-  exercise: RoutineExercise;
+  context: EjercicioEditorContext;
+  exercise: EjercicioComun;
   onDeleted: (id: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -167,7 +199,7 @@ function SortableExerciseCard({
 
   async function handleDelete() {
     setDeleting(true);
-    const result = await deleteExercise(exercise.id);
+    const result = await deleteActions[context](exercise.id);
     setDeleting(false);
 
     if (result?.error) {
@@ -210,7 +242,7 @@ function SortableExerciseCard({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <EditarEjercicioDialog exercise={exercise} />
+          <EditarEjercicioDialog context={context} exercise={exercise} />
           <AlertDialog>
             <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>
               <Trash2Icon />

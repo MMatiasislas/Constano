@@ -5,10 +5,13 @@ import { revalidatePath } from "next/cache";
 import { getCurrentGymId } from "@/lib/auth/get-gym-id";
 import { createClient } from "@/lib/supabase/server";
 import {
+  duplicateRoutineSchema,
   routineExerciseDetailsSchema,
   routineExerciseSchema,
+  type DuplicateRoutineValues,
   type RoutineExerciseDetailsValues,
 } from "@/lib/validations/routine";
+import type { RoutineDay, RoutineExercise } from "@/types/db";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -189,6 +192,109 @@ export async function deleteExercise(exerciseId: string) {
 
     revalidatePath(`/dashboard/alumnos/${memberId}/rutinas/${routineId}`);
     return { success: true as const };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "No hay una sesión activa. Iniciá sesión de nuevo.",
+    };
+  }
+}
+
+export async function duplicateRoutine(
+  routineId: string,
+  memberId: string,
+  values: DuplicateRoutineValues
+) {
+  const parsed = duplicateRoutineSchema.safeParse(values);
+
+  if (!parsed.success) {
+    return { error: "Revisá los datos del formulario." };
+  }
+
+  try {
+    const gymId = await getCurrentGymId();
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { data: original } = await supabase
+      .from("routines")
+      .select("*, routine_days(*, routine_exercises(*))")
+      .eq("id", routineId)
+      .eq("gym_id", gymId)
+      .single();
+
+    if (!original || original.member_id !== memberId) {
+      return { error: "No encontramos esa rutina." };
+    }
+
+    const { data: newRoutine, error } = await supabase
+      .from("routines")
+      .insert({
+        gym_id: gymId,
+        member_id: memberId,
+        title: parsed.data.title,
+        month_number:
+          parsed.data.month_number === "ninguno" ? null : Number(parsed.data.month_number),
+        notes: original.notes,
+        created_by: user?.id ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (error || !newRoutine) {
+      return { error: "No pudimos duplicar la rutina. Intentá de nuevo." };
+    }
+
+    const days = (
+      (original.routine_days ?? []) as (RoutineDay & { routine_exercises: RoutineExercise[] })[]
+    ).sort((a, b) => a.order_index - b.order_index);
+
+    for (const day of days) {
+      const { data: newDay, error: dayError } = await supabase
+        .from("routine_days")
+        .insert({
+          routine_id: newRoutine.id,
+          day_number: day.day_number,
+          order_index: day.order_index,
+          name: day.name,
+        })
+        .select("id")
+        .single();
+
+      if (dayError || !newDay) {
+        await supabase.from("routines").delete().eq("id", newRoutine.id);
+        return { error: "No pudimos duplicar los días de la rutina. Intentá de nuevo." };
+      }
+
+      const exercises = [...(day.routine_exercises ?? [])].sort(
+        (a, b) => a.order_index - b.order_index
+      );
+
+      if (exercises.length > 0) {
+        const { error: exercisesError } = await supabase.from("routine_exercises").insert(
+          exercises.map((exercise) => ({
+            routine_day_id: newDay.id,
+            name: exercise.name,
+            muscle_group: exercise.muscle_group,
+            sets: exercise.sets,
+            reps: exercise.reps,
+            weight: exercise.weight,
+            rest_seconds: exercise.rest_seconds,
+            notes: exercise.notes,
+            order_index: exercise.order_index,
+          }))
+        );
+
+        if (exercisesError) {
+          await supabase.from("routines").delete().eq("id", newRoutine.id);
+          return { error: "No pudimos duplicar los ejercicios de la rutina. Intentá de nuevo." };
+        }
+      }
+    }
+
+    revalidatePath(`/dashboard/alumnos/${memberId}`);
+    return { success: true as const, routineId: newRoutine.id as string };
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "No hay una sesión activa. Iniciá sesión de nuevo.",

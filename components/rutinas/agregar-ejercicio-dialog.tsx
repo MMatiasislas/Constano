@@ -8,7 +8,9 @@ import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
 
 import { addExerciseToDay } from "@/app/(dashboard)/dashboard/alumnos/[id]/rutinas/[routineId]/actions";
+import { addTemplateExerciseToDay } from "@/app/(dashboard)/dashboard/rutinas/plantillas/[templateId]/actions";
 import { createClient } from "@/lib/supabase/client";
+import type { EjercicioEditorContext } from "./editor-ejercicios-dia";
 import { cn } from "@/lib/utils";
 import { muscleGroupBadgeClass } from "@/lib/exercises";
 import {
@@ -55,7 +57,18 @@ const emptyDetails: RoutineExerciseDetailsValues = {
   notes: "",
 };
 
-export function AgregarEjercicioDialog({ routineDayId }: { routineDayId: string }) {
+const addActions = {
+  routine: addExerciseToDay,
+  template: addTemplateExerciseToDay,
+};
+
+export function AgregarEjercicioDialog({
+  context,
+  dayId,
+}: {
+  context: EjercicioEditorContext;
+  dayId: string;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"buscar" | "detalles">("buscar");
@@ -123,7 +136,7 @@ export function AgregarEjercicioDialog({ routineDayId }: { routineDayId: string 
     if (!selected) return;
 
     setLoading(true);
-    const result = await addExerciseToDay(routineDayId, {
+    const result = await addActions[context](dayId, {
       name: selected.name,
       muscle_group: selected.muscle_group,
       ...values,

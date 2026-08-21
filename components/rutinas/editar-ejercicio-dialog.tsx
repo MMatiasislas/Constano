@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { PencilIcon } from "lucide-react";
 
 import { updateExercise } from "@/app/(dashboard)/dashboard/alumnos/[id]/rutinas/[routineId]/actions";
+import { updateTemplateExercise } from "@/app/(dashboard)/dashboard/rutinas/plantillas/[templateId]/actions";
 import {
   routineExerciseDetailsSchema,
   type RoutineExerciseDetailsValues,
@@ -25,9 +26,20 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import { EjercicioDetallesFields } from "./ejercicio-detalles-fields";
-import type { RoutineExercise } from "@/types/db";
+import type { EjercicioComun, EjercicioEditorContext } from "./editor-ejercicios-dia";
 
-export function EditarEjercicioDialog({ exercise }: { exercise: RoutineExercise }) {
+const updateActions = {
+  routine: updateExercise,
+  template: updateTemplateExercise,
+};
+
+export function EditarEjercicioDialog({
+  context,
+  exercise,
+}: {
+  context: EjercicioEditorContext;
+  exercise: EjercicioComun;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -52,7 +64,7 @@ export function EditarEjercicioDialog({ exercise }: { exercise: RoutineExercise 
 
   async function handleSubmit(values: RoutineExerciseDetailsValues) {
     setLoading(true);
-    const result = await updateExercise(exercise.id, values);
+    const result = await updateActions[context](exercise.id, values);
     setLoading(false);
 
     if (result?.error) {

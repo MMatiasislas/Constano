@@ -52,6 +52,13 @@ export const routineInfoFormSchema = z.object(routineBaseFields);
 
 export type RoutineInfoFormValues = z.infer<typeof routineInfoFormSchema>;
 
+export const duplicateRoutineSchema = z.object({
+  title: routineBaseFields.title,
+  month_number: routineBaseFields.month_number,
+});
+
+export type DuplicateRoutineValues = z.infer<typeof duplicateRoutineSchema>;
+
 export const routineDayNameSchema = z.object({
   name: z.string().trim().min(1, "Ponele un nombre a este día"),
 });
