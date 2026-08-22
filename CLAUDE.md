@@ -196,3 +196,63 @@ existía (apuntaba a esta página, que no existía hasta ahora).
   confirma que el browser de estas sesiones puede tener actividad humana concurrente de Matías en
   paralelo; si el nombre no era intencional, renombrarla de nuevo desde
   `/dashboard/configuracion/retencion`.
+
+## Semana 5, Bloque C: mensaje de WhatsApp configurable + badge en sidebar (cierra la Semana 5)
+- **`gyms.settings` (jsonb, `supabase/migrations/005_gym_settings.sql`, default `{}`)**: columna de
+  propósito general para config del gym que no amerita su propia columna/migración. Hoy solo tiene
+  una key: `retention_message` (string | ausente = usa el default). **Si se agrega otra key acá en
+  el futuro, hacerlo como merge (`{ ...currentSettings, nuevaKey: valor }`), nunca sobreescribiendo
+  el objeto entero** — `updateRetentionMessage` en
+  `app/(dashboard)/dashboard/configuracion/mensajes/actions.ts` ya sigue ese patrón (lee, mergea,
+  actualiza) precisamente para no pisar otras keys que se sumen más adelante.
+- `lib/retention.ts` (agregado): `DEFAULT_WHATSAPP_TEMPLATE`, `getWhatsAppTemplate(gymSettings)`
+  (resuelve custom vs. default), `renderWhatsAppMessage(template, nombre, dias, gym)` (reemplaza
+  `{nombre}`/`{dias}`/`{gym}`), `buildWhatsAppMessage(nombre, dias, gym, template?)` (wrapper que ya
+  resuelve el default si `template` viene `null`/vacío — usado directo desde `AlertaCard`).
+- **Decisión no obvia al "restaurar mensaje por defecto"**: al guardar, si el texto del textarea es
+  idéntico al `DEFAULT_WHATSAPP_TEMPLATE` actual, se guarda `retention_message: null` en vez del
+  texto literal (ver `updateRetentionMessage`). Así, si el default se cambia en el código más
+  adelante, un gym que "restauró" sigue recibiendo el default nuevo en vez de quedar pegado a una
+  copia congelada del default de hoy. El botón "Restaurar mensaje por defecto" del form
+  (`components/mensajes/mensaje-retencion-form.tsx`) solo pisa el textarea en el cliente — hay que
+  tocar "Guardar cambios" para que se persista (mismo flujo de 2 pasos que el resto de los forms).
+- `app/(dashboard)/dashboard/configuracion/mensajes/`: página + `actions.ts`
+  (`updateRetentionMessage`). Preview en vivo con `useWatch` (mismo patrón que
+  `regla-form.tsx`/Bloque A), datos de ejemplo fijos (Juan Pérez, 10 días, nombre real del gym).
+  Límite de 500 caracteres (`lib/validations/retention-message.ts`).
+- **Badge de alertas en el sidebar**: se decidió resolver la data en `app/(dashboard)/layout.tsx`
+  (Server Component compartido por todo el dashboard) y pasarla como prop a `SidebarNav` (Client
+  Component) — no hay Suspense, la query corre en paralelo (`Promise.all`) con la del perfil que ya
+  existía, mismo costo de latencia que antes.
+  - **El badge cuenta solo `status = 'active'`, NO `active + contacted`** — desviación a propósito
+    del pedido original (que sumaba `contacted`). Si contactada siguiera sumando, marcar una alerta
+    como contactada no bajaría el badge, lo cual contradice el criterio de aceptación pedido
+    ("marcar contactada → baja el badge"). El resumen de Inicio (`dashboard/page.tsx`, Bloque B) sí
+    sigue sumando `active + contacted` a propósito — ahí se busca una foto general de "cuántas
+    alertas abiertas hay", no un contador de pendientes-sin-tocar.
+  - **Gotcha real de Next.js App Router encontrado probando en vivo**: un layout compartido NO se
+    vuelve a pedir al server con una navegación normal por `<Link>` entre páginas del mismo layout
+    (Next.js reusa el render ya hecho del layout) — solo se refresca con: (a) una navegación dura
+    (recargar / poner la URL de nuevo), o (b) cualquier `router.refresh()` disparado desde un
+    Client Component (todas las acciones de alertas ya lo hacen). Se confirmó en vivo: crear una
+    alerta nueva y navegar con el sidebar a "Inicio" dejaba el badge desactualizado hasta la
+    próxima acción o recarga dura; "Marcar contactada" sí lo actualiza al toque porque
+    `contactar-button.tsx` llama `router.refresh()`. **No es un bug para arreglar** — es como
+    funciona el App Router, aceptado como límite de MVP (igual que no tener cron para el motor).
+- Sidebar (`components/dashboard/sidebar-nav.tsx`): "Configuración" dejó de ser un link directo a
+  `/configuracion/retencion` (ya no tiene un único destino con 2 sub-páginas) — ahora es un
+  encabezado de sección sin link propio, con "Retención" y "Mensajes" indentados debajo. Sin
+  toggle de expandir/colapsar (siempre visible) — más simple, y con 2 sub-items no hace falta.
+- **Probado end-to-end en el browser contra datos reales** (gym "iron gym"): alumno de prueba
+  "Badge Testing" (3x/sem, alta 25 días atrás) → el motor generó la alerta → badge "1" visible en
+  el sidebar tras una recarga dura → "Marcar contactada" → badge desaparece sin recargar (confirma
+  que `router.refresh()` sí re-renderiza el layout) → página de Mensajes: textarea con el default,
+  contador de caracteres, preview en vivo actualizándose mientras se tipea → escribir un mensaje
+  custom con las 3 variables → guardar → volver a Retención → el link de WhatsApp usa el mensaje
+  custom con las variables ya reemplazadas (nombre completo del alumno, días reales, nombre real
+  del gym) → volver a Mensajes → "Restaurar mensaje por defecto" → guardar → el link de WhatsApp
+  vuelve al default. Sin errores ni warnings de consola en toda la sesión. Alumno de prueba dado
+  de baja al terminar (mismo criterio que "Foto Testing"/"Alerta Testing").
+  - Migración 005 (`gyms.settings jsonb`) corrida por Matías — confirmado con la columna
+    funcionando (antes de correrla, el guardado tiraba `column gyms.settings does not exist`,
+    esperable).

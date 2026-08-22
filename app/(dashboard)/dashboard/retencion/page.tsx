@@ -4,6 +4,7 @@ import { HeartPulseIcon } from "lucide-react";
 import { getCurrentGymId } from "@/lib/auth/get-gym-id";
 import { syncRetentionAlerts } from "@/lib/retention-alerts-engine";
 import { nombreCompleto } from "@/lib/members";
+import { getWhatsAppTemplate, type GymSettings } from "@/lib/retention";
 import { createClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -29,10 +30,13 @@ export default async function RetencionPage({ searchParams }: PageProps) {
 
   const supabase = await createClient();
 
-  const { count: reglasActivasCount } = await supabase
-    .from("retention_rules")
-    .select("*", { count: "exact", head: true })
-    .eq("active", true);
+  const [{ count: reglasActivasCount }, { data: gym }] = await Promise.all([
+    supabase.from("retention_rules").select("*", { count: "exact", head: true }).eq("active", true),
+    supabase.from("gyms").select("name, settings").eq("id", gymId).single(),
+  ]);
+
+  const gymName = gym?.name ?? "el gimnasio";
+  const whatsappTemplate = getWhatsAppTemplate(gym?.settings as GymSettings | null);
 
   let query = supabase
     .from("retention_alerts")
@@ -113,7 +117,12 @@ export default async function RetencionPage({ searchParams }: PageProps) {
               )}
               <div className="flex flex-col gap-3">
                 {alertas.map((alerta) => (
-                  <AlertaCard key={alerta.id} alerta={alerta} />
+                  <AlertaCard
+                    key={alerta.id}
+                    alerta={alerta}
+                    gymName={gymName}
+                    whatsappTemplate={whatsappTemplate}
+                  />
                 ))}
               </div>
             </>

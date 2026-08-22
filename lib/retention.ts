@@ -98,3 +98,43 @@ export function resolutionReasonLabel(reason: string | null) {
   if (!reason) return null;
   return RESOLUTION_REASON_LABELS[reason as ResolutionReasonValue] ?? reason;
 }
+
+// --- Mensaje de WhatsApp configurable (Bloque C) ---
+
+// `gyms.settings` es jsonb de propósito general (da lugar a sumar más config
+// a futuro sin migraciones nuevas) — este es el único campo que usa hoy.
+export type GymSettings = {
+  retention_message?: string | null;
+};
+
+export const DEFAULT_WHATSAPP_TEMPLATE =
+  "Hola {nombre}! ¿Todo bien? Te esperamos en el gimnasio, hace {dias} días que no te vemos. ¿Necesitás que te ayudemos con algo?";
+
+export function getWhatsAppTemplate(gymSettings: GymSettings | null | undefined): string {
+  return gymSettings?.retention_message?.trim() || DEFAULT_WHATSAPP_TEMPLATE;
+}
+
+export function renderWhatsAppMessage(
+  template: string,
+  memberName: string,
+  days: number,
+  gymName: string
+): string {
+  return template
+    .replaceAll("{nombre}", memberName)
+    .replaceAll("{dias}", String(days))
+    .replaceAll("{gym}", gymName);
+}
+
+// `template` es el valor crudo de `gyms.settings.retention_message` (puede
+// venir `null`/vacío si el gym no personalizó nada) — acá se resuelve el
+// default, no hace falta llamar a `getWhatsAppTemplate` antes.
+export function buildWhatsAppMessage(
+  memberName: string,
+  days: number,
+  gymName: string,
+  template?: string | null
+): string {
+  const resolved = template?.trim() || DEFAULT_WHATSAPP_TEMPLATE;
+  return renderWhatsAppMessage(resolved, memberName, days, gymName);
+}

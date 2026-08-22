@@ -4,7 +4,12 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { getInitials, nombreCompleto, whatsappHref } from "@/lib/members";
-import { ALERT_STATUS_BADGE, ALERT_STATUS_LABELS, resolutionReasonLabel } from "@/lib/retention";
+import {
+  ALERT_STATUS_BADGE,
+  ALERT_STATUS_LABELS,
+  buildWhatsAppMessage,
+  resolutionReasonLabel,
+} from "@/lib/retention";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,7 +20,13 @@ import { DescartarAlertaDialog } from "./descartar-alerta-dialog";
 import { ReabrirAlertaDialog } from "./reabrir-alerta-dialog";
 import type { RetentionAlertWithDetails } from "@/types/db";
 
-export function AlertaCard({ alerta }: { alerta: RetentionAlertWithDetails }) {
+type AlertaCardProps = {
+  alerta: RetentionAlertWithDetails;
+  gymName: string;
+  whatsappTemplate: string;
+};
+
+export function AlertaCard({ alerta, gymName, whatsappTemplate }: AlertaCardProps) {
   const alumno = alerta.members;
   const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
   const esAbierta = alerta.status === "active" || alerta.status === "contacted";
@@ -67,7 +78,12 @@ export function AlertaCard({ alerta }: { alerta: RetentionAlertWithDetails }) {
                 <a
                   href={whatsappHref(
                     alumno.phone,
-                    `Hola ${alumno.first_name}! Te extrañamos por el gym, ¿todo bien?`
+                    buildWhatsAppMessage(
+                      nombre,
+                      alerta.days_without_attendance,
+                      gymName,
+                      whatsappTemplate
+                    )
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
