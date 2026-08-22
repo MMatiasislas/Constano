@@ -152,3 +152,38 @@ export type MemberWithTodayAttendance = Member & { attendances: Attendance[] };
 export type AttendanceWithCheckedBy = Attendance & {
   checked_in_by_user: { email: string } | null;
 };
+
+export const FREQUENCY_OPTIONS = [
+  { value: "all", label: "Todos los alumnos" },
+  { value: "1", label: "1 vez por semana o más" },
+  { value: "2", label: "2 veces por semana o más" },
+  { value: "3", label: "3 veces por semana o más" },
+  { value: "4", label: "4 veces por semana o más" },
+  { value: "5", label: "5 veces por semana o más" },
+  { value: "6", label: "6 veces por semana o más" },
+  { value: "free", label: "Plan libre" },
+] as const;
+
+export type ApplyToFrequencyValue = (typeof FREQUENCY_OPTIONS)[number]["value"];
+
+export type RetentionRule = {
+  id: string;
+  gym_id: string;
+  name: string;
+  days_without_attendance: number;
+  applies_to_frequency: number | null;
+  active: boolean;
+  created_at: string;
+};
+
+export type RetentionAlert = {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  rule_id: string;
+  triggered_at: string;
+  status: string;
+  resolved_at: string | null;
+  notes: string | null;
+  days_without_attendance: number;
+};

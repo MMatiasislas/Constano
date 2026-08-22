@@ -23,7 +23,7 @@ const navItems = [
   { href: "/dashboard/rutinas/plantillas", label: "Plantillas", icon: LayoutTemplateIcon },
   { href: "/dashboard/retencion", label: "Retención", icon: HeartPulseIcon },
   { href: "/dashboard/pagos", label: "Pagos", icon: CreditCardIcon },
-  { href: "/dashboard/configuracion", label: "Configuración", icon: SettingsIcon },
+  { href: "/dashboard/configuracion/retencion", label: "Configuración", icon: SettingsIcon },
 ];
 
 export function SidebarNav() {
