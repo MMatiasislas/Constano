@@ -134,3 +134,21 @@ export type Member = {
   notes: string | null;
   created_at: string;
 };
+
+export type Attendance = {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  checked_in_at: string;
+  checked_in_by: string | null;
+};
+
+export type AttendanceWithMember = Attendance & {
+  members: Pick<Member, "id" | "first_name" | "last_name" | "photo_url" | "weekly_frequency">;
+};
+
+export type MemberWithTodayAttendance = Member & { attendances: Attendance[] };
+
+export type AttendanceWithCheckedBy = Attendance & {
+  checked_in_by_user: { email: string } | null;
+};

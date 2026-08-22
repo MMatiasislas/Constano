@@ -1,0 +1,103 @@
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+
+import { createClient } from "@/lib/supabase/server";
+import { getEndOfDayISO, getStartOfDayISO } from "@/lib/attendance";
+import { Card, CardContent } from "@/components/ui/card";
+import { AsistenciaFiltros } from "@/components/asistencia/asistencia-filtros";
+import { AsistenciaLista } from "@/components/asistencia/asistencia-lista";
+import type { MemberStatus, MemberWithTodayAttendance } from "@/types/db";
+
+function escapeForOr(value: string) {
+  return value.replace(/[%,()]/g, (char) => `\\${char}`);
+}
+
+function capitalizar(texto: string) {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+type PageProps = {
+  searchParams: Promise<{ q?: string; pausados?: string }>;
+};
+
+export default async function AsistenciaPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const q = params.q?.trim() ?? "";
+  const incluirPausados = params.pausados === "1";
+
+  const supabase = await createClient();
+
+  const estados: MemberStatus[] = incluirPausados ? ["active", "paused"] : ["active"];
+
+  let query = supabase
+    .from("members")
+    .select("*, attendances(id, checked_in_at, checked_in_by)")
+    .in("status", estados)
+    .gte("attendances.checked_in_at", getStartOfDayISO())
+    .lt("attendances.checked_in_at", getEndOfDayISO())
+    .order("first_name", { ascending: true });
+
+  if (q) {
+    const safeQ = escapeForOr(q);
+    query = query.or(
+      `first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,phone.ilike.%${safeQ}%`
+    );
+  }
+
+  const [{ data }, { count: totalCount }, { count: presentesHoyCount }] = await Promise.all([
+    query,
+    supabase.from("members").select("*", { count: "exact", head: true }).in("status", estados),
+    supabase
+      .from("attendances")
+      .select("member_id, members!inner(status)", { count: "exact", head: true })
+      .gte("checked_in_at", getStartOfDayISO())
+      .lt("checked_in_at", getEndOfDayISO())
+      .in("members.status", estados),
+  ]);
+  const members = (data ?? []) as MemberWithTodayAttendance[];
+  const presentesHoy = presentesHoyCount ?? 0;
+
+  const fechaLarga = capitalizar(
+    format(new Date(), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Asistencia</h1>
+          <p className="text-muted-foreground">{fechaLarga}</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
+          <span className="text-2xl font-semibold text-emerald-700 dark:text-emerald-400">
+            {presentesHoy}
+          </span>
+          <span className="text-sm text-emerald-700 dark:text-emerald-400">
+            {presentesHoy === 1 ? "presente hoy" : "presentes hoy"}
+          </span>
+        </div>
+      </div>
+
+      {(totalCount ?? 0) === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+            Todavía no tenés alumnos activos. Cargá alumnos para empezar a registrar asistencia.
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <AsistenciaFiltros />
+          {members.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+                No encontramos alumnos con esos filtros.
+              </CardContent>
+            </Card>
+          ) : (
+            <AsistenciaLista members={members} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}

@@ -22,7 +22,8 @@ import { AlumnoAcciones } from "@/components/alumnos/alumno-acciones";
 import { NuevaRutinaDialog } from "@/components/rutinas/nueva-rutina-dialog";
 import { RutinaAcciones } from "@/components/rutinas/rutina-acciones";
 import { DuplicarRutinaDialog } from "@/components/rutinas/duplicar-rutina-dialog";
-import type { Member, RoutineWithDayCount } from "@/types/db";
+import { AlumnoAsistenciaTab } from "@/components/asistencia/alumno-asistencia-tab";
+import type { AttendanceWithCheckedBy, Member, RoutineWithDayCount } from "@/types/db";
 
 function calcularEdad(birthDate: string | null) {
   if (!birthDate) return null;
@@ -49,13 +50,19 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: member }, { data: routinesData }] = await Promise.all([
+  const [{ data: member }, { data: routinesData }, { data: attendancesData }] = await Promise.all([
     supabase.from("members").select("*").eq("id", id).single(),
     supabase
       .from("routines")
       .select("*, routine_days(count)")
       .eq("member_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("attendances")
+      .select("*, checked_in_by_user:users(email)")
+      .eq("member_id", id)
+      .order("checked_in_at", { ascending: false })
+      .limit(60),
   ]);
 
   if (!member) {
@@ -63,6 +70,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
   }
 
   const routinas = (routinesData ?? []) as RoutineWithDayCount[];
+  const attendances = (attendancesData ?? []) as AttendanceWithCheckedBy[];
 
   const alumno = member as Member;
   const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
@@ -159,7 +167,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
           <RutinasTabContent memberId={alumno.id} routinas={routinas} />
         </TabsContent>
         <TabsContent value="asistencia">
-          <PlaceholderTab text="Próximamente - Semana 5" />
+          <AlumnoAsistenciaTab attendances={attendances} weeklyFrequency={alumno.weekly_frequency} />
         </TabsContent>
         <TabsContent value="pagos">
           <PlaceholderTab text="Próximamente - Semana 4" />
