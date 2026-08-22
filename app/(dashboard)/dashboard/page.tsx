@@ -37,6 +37,16 @@ export default async function DashboardPage() {
   const restantes = diasRestantes(gym?.trial_ends_at ?? null);
   const enPrueba = gym?.subscription_status === "trial";
 
+  const [{ count: alumnosActivos }, { count: rutinasCount }, { count: alertasAbiertas }] =
+    await Promise.all([
+      supabase.from("members").select("*", { count: "exact", head: true }).eq("status", "active"),
+      supabase.from("routines").select("*", { count: "exact", head: true }),
+      supabase
+        .from("retention_alerts")
+        .select("*", { count: "exact", head: true })
+        .in("status", ["active", "contacted"]),
+    ]);
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
@@ -69,21 +79,33 @@ export default async function DashboardPage() {
           <CardHeader>
             <UsersIcon className="size-5 text-muted-foreground" />
             <CardTitle className="mt-2">Alumnos</CardTitle>
-            <CardDescription>Todavía no cargaste alumnos.</CardDescription>
+            <CardDescription>
+              {alumnosActivos
+                ? `${alumnosActivos} ${alumnosActivos === 1 ? "alumno activo" : "alumnos activos"}`
+                : "Todavía no cargaste alumnos."}
+            </CardDescription>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <DumbbellIcon className="size-5 text-muted-foreground" />
             <CardTitle className="mt-2">Rutinas</CardTitle>
-            <CardDescription>Todavía no creaste rutinas.</CardDescription>
+            <CardDescription>
+              {rutinasCount
+                ? `${rutinasCount} ${rutinasCount === 1 ? "rutina creada" : "rutinas creadas"}`
+                : "Todavía no creaste rutinas."}
+            </CardDescription>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader>
             <HeartPulseIcon className="size-5 text-muted-foreground" />
             <CardTitle className="mt-2">Alertas de retención</CardTitle>
-            <CardDescription>Sin alertas por ahora.</CardDescription>
+            <CardDescription>
+              {alertasAbiertas
+                ? `${alertasAbiertas} ${alertasAbiertas === 1 ? "alerta activa" : "alertas activas"}`
+                : "Sin alertas por ahora."}
+            </CardDescription>
           </CardHeader>
         </Card>
       </div>

@@ -12,6 +12,7 @@ import {
   getInitials,
   nombreCompleto,
   parseFechaLocal,
+  whatsappHref,
 } from "@/lib/members";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -36,10 +37,6 @@ function calcularEdad(birthDate: string | null) {
     edad--;
   }
   return edad;
-}
-
-function whatsappHref(phone: string) {
-  return `https://wa.me/${phone.replace(/[^\d]/g, "")}`;
 }
 
 type PageProps = {

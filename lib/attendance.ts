@@ -12,7 +12,7 @@ function pad(value: number) {
 // Extrae año/mes/día tal como se ven en horario de Argentina, sin importar
 // en qué timezone corra el server. Necesario porque `new Date().getDate()`
 // devuelve el día en la timezone del proceso (UTC en Vercel), no en Buenos Aires.
-function getDatePartsInBA(date: Date) {
+export function getDatePartsInBA(date: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: BA_TIMEZONE,
     year: "numeric",
@@ -64,6 +64,17 @@ export function calcularAsistenciasSemana(attendances: Attendance[], hoy: Date =
     const d = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
     return d >= monday && d <= sunday;
   }).length;
+}
+
+// Días corridos entre una fecha (`fromISO`, ej. última asistencia o alta del
+// alumno) y "hoy", ambos calculados en horario de Argentina — usado por el
+// motor de alertas de retención para no depender de la timezone del server.
+export function daysSinceInBA(fromISO: string, hoy: Date = new Date()) {
+  const from = getDatePartsInBA(new Date(fromISO));
+  const to = getDatePartsInBA(hoy);
+  const fromUTC = Date.UTC(from.year, from.month - 1, from.day);
+  const toUTC = Date.UTC(to.year, to.month - 1, to.day);
+  return Math.round((toUTC - fromUTC) / (1000 * 60 * 60 * 24));
 }
 
 export function ultimaAsistenciaTexto(attendances: Attendance[]) {

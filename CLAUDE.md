@@ -117,3 +117,82 @@ Se van sumando acá porque el CLI de shadcn para este preset (`base-nova` sobre 
 - El gym_id del user actual se obtiene consultando public.users filtrando por auth.uid().
 - Ya existen: lib/supabase/client.ts, lib/supabase/server.ts, lib/supabase/middleware.ts, proxy.ts en la raíz (Next.js 16 usa proxy.ts en vez de middleware.ts).
 - El componente form.tsx está escrito a mano (no viene del CLI de shadcn) porque el proyecto usa base-nova sobre Base UI,
+  no Radix (usa `React.cloneElement` en vez de `Slot`).
+
+## Semana 4 y Semana 5 Bloque A: no documentadas acá todavía
+Este archivo no se actualizó cuando se hicieron el módulo de Asistencia (Semana 4) ni el CRUD de
+reglas de retención (Semana 5, Bloque A) — quedaron documentados solo en la memoria de Claude
+(`project_constano_saas.md`), no acá. Si hace falta el detalle de esos bloques (helpers de
+timezone en `lib/attendance.ts`, gotchas de `markAttendance`, diseño del sentinel `0` en
+`applies_to_frequency`, etc.), revisar esa memoria hasta que se pase a este archivo.
+
+## Semana 5, Bloque B: motor de alertas de retención (completo, probado end-to-end)
+`app/(dashboard)/dashboard/retencion/` (página + actions), `lib/retention-alerts-engine.ts`
+(el motor), `lib/retention.ts` (agregado: `ruleAppliesToMember`, `findTriggeredRule`,
+labels de estado/motivo), `components/retencion-alertas/`. El link "Retención" del sidebar ya
+existía (apuntaba a esta página, que no existía hasta ahora).
+
+- **No hay cron ni background jobs** (Next.js en Vercel, sin infra propia): el motor
+  (`syncRetentionAlerts(gymId)`) se recalcula **en cada carga de `/dashboard/retencion`**, no en
+  segundo plano. Para cada alumno activo calcula días sin asistencia (última asistencia real, o
+  fecha de alta si nunca asistió, con `daysSinceInBA()` nuevo en `lib/attendance.ts` — mismo
+  patrón de timezone Argentina que el resto del proyecto) y lo compara contra las reglas activas
+  del gym con `findTriggeredRule()`: de las reglas que le aplican y ya se cumplieron, elige la de
+  `days_without_attendance` más alto (la más exigente disparada), para no generar una alerta por
+  cada regla que matchee a la vez.
+- **Idempotencia por "racha de ausencia", no por estado de la alerta** (bug real encontrado y
+  arreglado probando en vivo): la primera versión solo evitaba duplicar si el alumno tenía una
+  alerta "abierta" (`active`/`contacted`). Al resolver o descartar una alerta, como el alumno
+  seguía sin asistencia real, la alerta se volvía a crear en la carga siguiente de la página —
+  se generaron 4 duplicados probando esto. Fix: ahora se compara contra la ÚLTIMA alerta del
+  alumno sin importar su estado — si su `triggered_at` es posterior o igual a la fecha de
+  referencia actual (última asistencia o alta), significa que ya se alertó por esta misma racha
+  y no se crea una nueva. Solo se genera una alerta nueva de verdad si el alumno vuelve a asistir
+  (la fecha de referencia avanza) y después vuelve a faltar.
+- **Gotcha real de schema (no solo de código)**: la tabla `retention_alerts` real en Supabase NO
+  tenía la columna `days_without_attendance` a pesar de que el tipo `RetentionAlert` en
+  `types/db.ts` ya la declaraba desde Bloque A — el insert fallaba en silencio con
+  `PGRST204 Could not find the 'days_without_attendance' column`. Se agregó la migración
+  `supabase/migrations/004_retention_alert_resolution.sql` (agrega esa columna + `resolution_reason`,
+  ambas con `add column if not exists`), que Matías corrió a mano en el SQL Editor. **Si aparece
+  otro error `PGRST204` de "columna no encontrada", sospechar lo mismo: el tipo TS puede estar
+  adelantado a la tabla real** — no asumir que porque el campo está en `types/db.ts` ya existe en
+  Supabase.
+- Estados de alerta (`RETENTION_ALERT_STATUSES` en `types/db.ts`): `active` → `contacted` (manual,
+  sin form) → `resolved` (con motivo obligatorio de `RESOLUTION_REASON_OPTIONS` + nota opcional) o
+  `dismissed` (falso positivo, solo nota opcional). Cualquiera de las dos últimas se puede
+  `reopenAlert()` (vuelve a `active`, limpia motivo/nota/`resolved_at` — las tres, no solo el
+  motivo: se encontró y arregló un caso donde la nota vieja quedaba pegada tras reabrir).
+  `resolution_reason` es texto libre en la tabla (no hay CHECK constraint), igual que `status`
+  desde Bloque A.
+- **Patrón nuevo para Select requerido sin default obvio**: `ResolverAlertaDialog` necesitaba que
+  el Select de motivo arrancara vacío (mostrando el placeholder "Elegí un motivo") en vez de
+  pre-seleccionar una opción. Pasar `defaultValues: { resolution_reason: undefined }` a
+  `useForm` tira un warning de consola de Base UI ("A component is changing the uncontrolled
+  value state of Select to be controlled"). Fix: usar `""` como sentinel (cast a
+  `ResolveAlertFormValues["resolution_reason"]`) en vez de `undefined` — el Select queda
+  controlado desde el primer render y el schema de zod igual rechaza `""` con su mensaje
+  ("Elegí un motivo"). Aplicar el mismo patrón si aparece otro Select requerido sin valor inicial
+  natural.
+- `lib/members.ts`: se extrajo `whatsappHref(phone, mensaje?)` (antes vivía duplicada como función
+  local en `alumnos/[id]/page.tsx`) para reusarla en las alertas de retención con un mensaje
+  precargado ("Hola {nombre}! Te extrañamos por el gym, ¿todo bien?").
+- Dashboard de Inicio (`app/(dashboard)/dashboard/page.tsx`): las 3 cards (Alumnos/Rutinas/Alertas
+  de retención) eran texto estático hardcodeado desde que se creó la Semana 0 ("Todavía no
+  cargaste alumnos" aunque hubiera alumnos reales) — se conectaron a counts reales (`members`
+  activos, `routines` totales, `retention_alerts` con status `active`/`contacted`) en esta misma
+  sesión, a pedido de Matías.
+- **Probado end-to-end en el browser contra datos reales** (gym "iron gym"): alumno de prueba
+  "Alerta Testing" (3x/sem, fecha de alta 20 días atrás, sin asistencia cargada) → el motor generó
+  la alerta correctamente (21 días sin venir, regla de "3x/sem, 12 días") → contactar → resolver
+  con motivo "Volvió a entrenar" + nota → reabrir (nota se limpia) → descartar con nota → filtro
+  por estado (activas/contactadas/resueltas/descartadas/todas) y buscador probados → link de
+  WhatsApp con mensaje precargado confirmado. Alumno de prueba dado de baja al terminar (mismo
+  criterio que "Foto Testing" en Semana 2: no se borra, queda inactivo). Sin errores ni warnings
+  de consola después de los dos fixes de arriba.
+- **Nota de datos reales, no un bug de esta sesión**: mientras se probaba, la regla de retención
+  real del gym (antes "Regla editada") apareció renombrada a "alunb" — no fue una acción de esta
+  sesión (no hay ningún click ni tipeo registrado sobre ese campo). Es la primera vez que se
+  confirma que el browser de estas sesiones puede tener actividad humana concurrente de Matías en
+  paralelo; si el nombre no era intencional, renombrarla de nuevo desde
+  `/dashboard/configuracion/retencion`.

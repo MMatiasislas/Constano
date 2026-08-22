@@ -176,14 +176,36 @@ export type RetentionRule = {
   created_at: string;
 };
 
+export const RETENTION_ALERT_STATUSES = ["active", "contacted", "resolved", "dismissed"] as const;
+
+export type RetentionAlertStatus = (typeof RETENTION_ALERT_STATUSES)[number];
+
+export const RESOLUTION_REASON_OPTIONS = [
+  { value: "volvio", label: "Volvió a entrenar" },
+  { value: "renovo", label: "Renovó / sigue activo" },
+  { value: "baja", label: "Se dio de baja" },
+  { value: "otro", label: "Otro" },
+] as const;
+
+export type ResolutionReasonValue = (typeof RESOLUTION_REASON_OPTIONS)[number]["value"];
+
 export type RetentionAlert = {
   id: string;
   gym_id: string;
   member_id: string;
   rule_id: string;
   triggered_at: string;
-  status: string;
+  status: RetentionAlertStatus;
   resolved_at: string | null;
+  resolution_reason: string | null;
   notes: string | null;
   days_without_attendance: number;
+};
+
+export type RetentionAlertWithDetails = RetentionAlert & {
+  members: Pick<
+    Member,
+    "id" | "first_name" | "last_name" | "phone" | "photo_url" | "weekly_frequency" | "status"
+  >;
+  retention_rules: Pick<RetentionRule, "id" | "name" | "days_without_attendance">;
 };

@@ -29,6 +29,13 @@ export function nombreCompleto(firstName: string, lastName: string | null) {
   return [firstName, lastName].filter(Boolean).join(" ");
 }
 
+export function whatsappHref(phone: string, mensaje?: string) {
+  const numero = phone.replace(/[^\d]/g, "");
+  return mensaje
+    ? `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`
+    : `https://wa.me/${numero}`;
+}
+
 // Los campos `date` de Postgres llegan como "YYYY-MM-DD". Parsearlos con
 // `new Date(str)` los interpreta como medianoche UTC y, al formatear en una
 // zona horaria negativa (ej. Argentina), el día se corre uno para atrás.
