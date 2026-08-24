@@ -2,7 +2,7 @@ import { addDays } from "date-fns";
 
 import { getDatePartsInBA } from "@/lib/attendance";
 import { parseFechaLocal } from "@/lib/members";
-import type { Membership } from "@/types/db";
+import { PAYMENT_METHODS, type Membership, type PaymentMethod } from "@/types/db";
 
 export type MembershipStatusLabel = "sin_plan" | "al_dia" | "vence_pronto" | "vencido";
 
@@ -67,4 +67,18 @@ export function getMembershipStatusColor(status: MembershipStatusLabel) {
     case "sin_plan":
       return "border-transparent bg-muted text-muted-foreground";
   }
+}
+
+// Formato argentino: separador de miles con punto, sin decimales (los planes
+// y pagos del gym siempre son montos enteros de pesos).
+export function formatCurrency(amount: number) {
+  return `$${Math.round(amount).toLocaleString("es-AR")}`;
+}
+
+const METHOD_LABELS = Object.fromEntries(
+  PAYMENT_METHODS.map((method) => [method.value, method.label])
+) as Record<PaymentMethod, string>;
+
+export function getMethodLabel(method: string) {
+  return METHOD_LABELS[method as PaymentMethod] ?? method;
 }

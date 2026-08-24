@@ -26,10 +26,14 @@ import { RutinaAcciones } from "@/components/rutinas/rutina-acciones";
 import { DuplicarRutinaDialog } from "@/components/rutinas/duplicar-rutina-dialog";
 import { AlumnoAsistenciaTab } from "@/components/asistencia/alumno-asistencia-tab";
 import { AsignarPlanDialog } from "@/components/planes/asignar-plan-dialog";
+import { CobrarRenovarDialog } from "@/components/pagos/cobrar-renovar-dialog";
+import { RegistrarPagoDialog } from "@/components/pagos/registrar-pago-dialog";
+import { HistorialPagos } from "@/components/pagos/historial-pagos";
 import type {
   AttendanceWithCheckedBy,
   Member,
   MembershipWithPlan,
+  Payment,
   Plan,
   RoutineWithDayCount,
 } from "@/types/db";
@@ -61,6 +65,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
     { data: attendancesData },
     { data: membershipData },
     { data: activePlansData },
+    { data: paymentsData },
   ] = await Promise.all([
     supabase.from("members").select("*").eq("id", id).single(),
     supabase
@@ -81,6 +86,11 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
       .eq("status", "active")
       .maybeSingle(),
     supabase.from("plans").select("*").eq("active", true).order("price", { ascending: true }),
+    supabase
+      .from("payments")
+      .select("*")
+      .eq("member_id", id)
+      .order("paid_at", { ascending: false }),
   ]);
 
   if (!member) {
@@ -91,6 +101,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
   const attendances = (attendancesData ?? []) as AttendanceWithCheckedBy[];
   const membership = (membershipData ?? null) as MembershipWithPlan | null;
   const planesActivos = (activePlansData ?? []) as Plan[];
+  const pagos = (paymentsData ?? []) as Payment[];
 
   const alumno = member as Member;
   const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
@@ -191,7 +202,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
           <AlumnoAsistenciaTab attendances={attendances} weeklyFrequency={alumno.weekly_frequency} />
         </TabsContent>
         <TabsContent value="pagos">
-          <PlaceholderTab text="Próximamente - Semana 4" />
+          <PagosTabContent memberId={alumno.id} membership={membership} pagos={pagos} />
         </TabsContent>
       </Tabs>
     </div>
@@ -323,12 +334,22 @@ function RutinasTabContent({
   );
 }
 
-function PlaceholderTab({ text }: { text: string }) {
+function PagosTabContent({
+  memberId,
+  membership,
+  pagos,
+}: {
+  memberId: string;
+  membership: MembershipWithPlan | null;
+  pagos: Payment[];
+}) {
   return (
-    <Card>
-      <CardContent className="flex items-center justify-center py-16 text-center text-muted-foreground">
-        {text}
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap gap-2">
+        {membership && <CobrarRenovarDialog memberId={memberId} membership={membership} />}
+        <RegistrarPagoDialog memberId={memberId} />
+      </div>
+      <HistorialPagos pagos={pagos} />
+    </div>
   );
 }

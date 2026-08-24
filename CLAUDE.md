@@ -327,3 +327,83 @@ nueva. `payments` sigue sin usarse (es del Bloque B, historial de pagos).
   - El alumno de prueba usado fue el real "Matias islas" (no uno descartable como "Foto
     Testing") — quedó con "Plan Trimestral" asignado (membership real, no se revirtió). Avisado
     en el resumen de esta sesión, no se dio de baja nada.
+
+## Semana 6, Bloque B: registro de pagos + "Cobrar y renovar" + panel /dashboard/pagos (completo, probado end-to-end)
+Cierra el módulo de Pagos internos (gestión 100% manual, sin Stripe/MP — eso es Semana 9).
+Nuevo: `lib/validations/payment.ts`, ampliaciones en `lib/payments.ts` y en
+`alumnos/[id]/actions.ts`, `components/pagos/`, `app/(dashboard)/dashboard/pagos/page.tsx`
+(el link del sidebar ya existía apuntando ahí desde antes, rompía por falta de página).
+
+- **`renewMembership()` extraída como helper privado** en `alumnos/[id]/actions.ts`, compartida
+  por `assignPlan` (Bloque A, "Asignar/Cambiar plan" sin pago) y `registerPaymentAndRenew`
+  (Bloque B, "Cobrar y renovar"): ambas hacen exactamente lo mismo a nivel membership (expirar la
+  activa si había, crear la nueva con `end_date` calculado) — la única diferencia es que
+  `registerPaymentAndRenew` además inserta una fila en `payments` con
+  `membership_id = la membership recién creada`. Si se toca la lógica de renovación, tocarla acá
+  una sola vez.
+- **`registerPaymentAndRenew` devuelve un tipo de retorno explícito**
+  (`Promise<{error}|{success:true, endDate}>`) — mismo gotcha de narrowing ya documentado en
+  Semana 4 (`markAttendance`): TS no infiere bien la unión cuando la rama de éxito tiene un campo
+  extra. El caller (`CobrarRenovarDialog`) narrowea con `"error" in result`, no con
+  `result?.error`.
+- **`registerPaymentOnly`** (botón "Registrar pago sin renovar", para señas/ajustes/venta de
+  productos): busca la membership `active` actual del alumno (si tiene) y la usa como
+  `membership_id` del pago — puede quedar `null` si el alumno no tiene plan. No toca la tabla
+  `memberships` para nada.
+- **Bug real encontrado y arreglado probando en vivo**: `payments.paid_at` es `timestamptz`
+  (llega de Supabase como ISO completo, ej. `"2026-08-24T00:00:00+00:00"`), **no** `date` como
+  `memberships.start_date`/`end_date` — pasarlo directo a `parseFechaLocal()` (que asume
+  `"YYYY-MM-DD"` y le concatena `T00:00:00`) produce un string inválido y `date-fns format()` tira
+  `RangeError: Invalid time value`, rompiendo toda la página. Fix en
+  `components/pagos/historial-pagos.tsx`: `parseFechaLocal(pago.paid_at.slice(0, 10))` — mismo
+  patrón ya usado con `routine.created_at` en la ficha del alumno. **Si se lee `paid_at` en algún
+  otro lugar del proyecto, aplicar el mismo `.slice(0, 10)` antes de `parseFechaLocal`** — no
+  asumir que es un `date` plano solo porque otras columnas `_date` del proyecto sí lo son.
+- `lib/payments.ts` (agregado): `formatCurrency(amount)` (formato argentino, `$15.000`, sin
+  decimales, `toLocaleString("es-AR")`) y `getMethodLabel(method)` (mapa desde `PAYMENT_METHODS`).
+- `lib/validations/payment.ts`: `paymentSchema` (amount > 0 requerido, method enum, paid_at
+  requerido, notes opcional). El Select de método arranca con default `"efectivo"` (no con el
+  sentinel `""` documentado en Bloque A de retención) porque acá sí hay un default de producto
+  obviamente correcto (el método más común), así que no aplica ese gotcha.
+- **`CobrarRenovarDialog`** (`components/pagos/cobrar-renovar-dialog.tsx`): recibe la
+  `MembershipWithPlan` actual del alumno (no un `planId` suelto) para poder mostrar nombre/precio
+  del plan en la descripción y pre-cargar el monto sugerido (`String(membership.plans.price)`,
+  editable). Reusado en dos lugares con la misma firma: el tab Pagos de la ficha del alumno y cada
+  fila del panel `/dashboard/pagos` — mismo componente, sin duplicar.
+- **Panel `/dashboard/pagos`**: Server Component, una sola query de `members` activos + una de
+  `memberships` activas (join a `plans`), cruzadas en JS con un `Map` por `member_id` (mismo
+  patrón que `assignPlan` de Bloque A, no hace falta un query anidado). `getMembershipStatus` +
+  `diasHastaVencimiento` (ya existían de Bloque A) se reusan tal cual para clasificar en las 4
+  tabs. Tab por default: "Vencidos" si hay alguno, si no el primer bucket no vacío en el orden
+  vencidos → vence pronto → al día → sin plan (spec solo pedía el primer caso, el fallback fue
+  criterio propio).
+- **Badge rojo de "Pagos" en el sidebar** (mismo patrón visual que el de Retención): en vez de
+  duplicar la función `getMembershipStatus` en una query, `app/(dashboard)/layout.tsx` cuenta
+  directo con SQL: `memberships` con `status='active'` y `end_date < hoy (Buenos Aires)`, con
+  `!inner` a `members` filtrando `status='active'` — mismo patrón de `!inner` + filtro anidado que
+  el contador de "presentes hoy" de Asistencia (Semana 4). `SidebarNav` ahora recibe
+  `pagosVencidosCount` además de `retentionAlertCount`, y el mapeo href→contador se generalizó a
+  un `Record<string, number>` en vez de un único `if` hardcodeado a Retención (para no repetir el
+  mismo bloque JSX por cada badge nuevo que se sume a futuro).
+- **Probado end-to-end en el browser contra datos reales** (gym "Setteria", alumno real "Matias
+  islas", que venía de Bloque A con "Plan Trimestral" asignado): tab Pagos → "Cobrar y renovar"
+  ($15.000 efectivo, con nota) → apareció en el historial, plan renovado a 90 días desde hoy
+  (22/11/2026) → acá se encontró y arregló el bug de `paid_at` de arriba → "Registrar pago sin
+  renovar" ($5.000, venta de producto) → apareció en el historial sin tocar la membership → panel
+  `/dashboard/pagos`: alumno real en "Al día (1)". Se creó un alumno de prueba "Pagos Testing"
+  (mismo criterio que "Foto Testing"/"Alerta Testing") para poder ver las 4 pestañas con datos:
+  asignarle un plan con `start_date` en el pasado (01/07/2026, plan de 30 días) → apareció en
+  "Vencidos (1)" con "Vencido hace 24 días (31/07/2026)" en rojo, y el badge "1" en el sidebar de
+  Pagos → "Cobrar y renovar" desde el panel (no desde la ficha) → se movió a "Al día", badge del
+  sidebar desapareció sin recargar → "Cambiar plan" con `start_date` 29/07/2026 (30 días → vence
+  28/08, dentro de 7 días) → apareció en "Vencen pronto (1)" con "Vence en 4 días (28/08/2026)" en
+  amarillo. Los 4 estados (vencido/vence pronto/al día/sin plan) quedaron verificados visualmente.
+  Alumno de prueba dado de baja al terminar. Sin errores ni warnings de consola después del fix.
+- **Nota de datos reales, no un bug de esta sesión**: al arrancar, "Matias islas" mostraba "Plan
+  Trimestral" pero con fecha de vencimiento de 30 días (23/09/2026) en vez de los 90 días
+  correctos (22/11/2026) que había quedado al cierre de Bloque A — no se pudo determinar la causa
+  exacta (no había forma de inspeccionar `memberships` directo en Supabase Table Editor en esta
+  sesión), consistente con el precedente ya documentado de actividad humana concurrente de
+  Matías en el mismo browser. Al usar "Cobrar y renovar" sobre ese mismo alumno el plan volvió a
+  quedar en 90 días correctos (22/11/2026), así que no bloqueó nada — solo queda como dato para
+  no sorprenderse si se repite.

@@ -35,14 +35,26 @@ function isPathActive(pathname: string, href: string) {
   return href === "/dashboard" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SidebarNav({ retentionAlertCount = 0 }: { retentionAlertCount?: number }) {
+export function SidebarNav({
+  retentionAlertCount = 0,
+  pagosVencidosCount = 0,
+}: {
+  retentionAlertCount?: number;
+  pagosVencidosCount?: number;
+}) {
   const pathname = usePathname();
+
+  const badgeCountByHref: Record<string, number> = {
+    "/dashboard/retencion": retentionAlertCount,
+    "/dashboard/pagos": pagosVencidosCount,
+  };
 
   return (
     <nav className="flex flex-col gap-1 p-3">
       {navItems.map((item) => {
         const isActive = isPathActive(pathname, item.href);
         const Icon = item.icon;
+        const badgeCount = badgeCountByHref[item.href] ?? 0;
 
         return (
           <Link
@@ -57,14 +69,14 @@ export function SidebarNav({ retentionAlertCount = 0 }: { retentionAlertCount?: 
           >
             <Icon className="size-4" />
             {item.label}
-            {item.href === "/dashboard/retencion" && retentionAlertCount > 0 && (
+            {badgeCount > 0 && (
               <span
                 className={cn(
                   "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold",
                   isActive ? "bg-primary-foreground text-primary" : "bg-red-500 text-white"
                 )}
               >
-                {retentionAlertCount > 99 ? "99+" : retentionAlertCount}
+                {badgeCount > 99 ? "99+" : badgeCount}
               </span>
             )}
           </Link>

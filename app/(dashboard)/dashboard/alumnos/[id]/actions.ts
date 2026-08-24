@@ -9,7 +9,10 @@ import { deleteMemberPhoto, uploadMemberPhoto } from "@/lib/storage/member-photo
 import { calcularFechaVencimiento } from "@/lib/payments";
 import { memberFormSchema, type MemberFormValues } from "@/lib/validations/member";
 import { assignPlanSchema, type AssignPlanFormValues } from "@/lib/validations/plan";
+import { paymentSchema, type PaymentFormValues } from "@/lib/validations/payment";
 import type { MemberStatus } from "@/types/db";
+
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 export async function updateMemberStatus(id: string, status: MemberStatus) {
   const supabase = await createClient();
@@ -94,6 +97,60 @@ export async function updateMember(
   return { success: true as const, warning: photoWarning };
 }
 
+// Compartida por `assignPlan` (Bloque A) y `registerPaymentAndRenew` (Bloque B, "Cobrar y
+// renovar"): un alumno tiene una sola membership activa a la vez, así que renovar siempre expira
+// la anterior (si había) antes de crear la nueva.
+async function renewMembership(
+  supabase: SupabaseServerClient,
+  gymId: string,
+  memberId: string,
+  planId: string,
+  startDate: string
+): Promise<{ error: string } | { membershipId: string; endDate: string }> {
+  const { data: plan, error: planError } = await supabase
+    .from("plans")
+    .select("duration_days")
+    .eq("id", planId)
+    .eq("gym_id", gymId)
+    .single();
+
+  if (planError || !plan) {
+    return { error: "No encontramos el plan elegido. Recargá la página e intentá de nuevo." };
+  }
+
+  const { error: expireError } = await supabase
+    .from("memberships")
+    .update({ status: "expired" })
+    .eq("member_id", memberId)
+    .eq("gym_id", gymId)
+    .eq("status", "active");
+
+  if (expireError) {
+    return { error: "No pudimos actualizar el plan anterior. Intentá de nuevo." };
+  }
+
+  const endDate = format(calcularFechaVencimiento(startDate, plan.duration_days), "yyyy-MM-dd");
+
+  const { data: membership, error: insertError } = await supabase
+    .from("memberships")
+    .insert({
+      gym_id: gymId,
+      member_id: memberId,
+      plan_id: planId,
+      start_date: startDate,
+      end_date: endDate,
+      status: "active",
+    })
+    .select("id")
+    .single();
+
+  if (insertError || !membership) {
+    return { error: "No pudimos asignar el plan. Intentá de nuevo." };
+  }
+
+  return { membershipId: membership.id as string, endDate };
+}
+
 export async function assignPlan(memberId: string, values: AssignPlanFormValues) {
   const parsed = assignPlanSchema.safeParse(values);
 
@@ -107,49 +164,105 @@ export async function assignPlan(memberId: string, values: AssignPlanFormValues)
     const gymId = await getCurrentGymId();
     const supabase = await createClient();
 
-    const { data: plan, error: planError } = await supabase
-      .from("plans")
-      .select("duration_days")
-      .eq("id", data.plan_id)
-      .eq("gym_id", gymId)
-      .single();
+    const result = await renewMembership(supabase, gymId, memberId, data.plan_id, data.start_date);
 
-    if (planError || !plan) {
-      return { error: "No encontramos el plan elegido. Recargá la página e intentá de nuevo." };
-    }
-
-    // Un alumno tiene una sola membership activa a la vez: la anterior (si
-    // había) se expira acá antes de crear la nueva.
-    const { error: expireError } = await supabase
-      .from("memberships")
-      .update({ status: "expired" })
-      .eq("member_id", memberId)
-      .eq("gym_id", gymId)
-      .eq("status", "active");
-
-    if (expireError) {
-      return { error: "No pudimos actualizar el plan anterior. Intentá de nuevo." };
-    }
-
-    const endDate = format(
-      calcularFechaVencimiento(data.start_date, plan.duration_days),
-      "yyyy-MM-dd"
-    );
-
-    const { error: insertError } = await supabase.from("memberships").insert({
-      gym_id: gymId,
-      member_id: memberId,
-      plan_id: data.plan_id,
-      start_date: data.start_date,
-      end_date: endDate,
-      status: "active",
-    });
-
-    if (insertError) {
-      return { error: "No pudimos asignar el plan. Intentá de nuevo." };
+    if ("error" in result) {
+      return { error: result.error };
     }
 
     revalidatePath(`/dashboard/alumnos/${memberId}`);
+    return { success: true as const };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "No hay una sesión activa. Iniciá sesión de nuevo.",
+    };
+  }
+}
+
+export async function registerPaymentAndRenew(
+  memberId: string,
+  planId: string,
+  values: PaymentFormValues
+): Promise<{ error: string } | { success: true; endDate: string }> {
+  const parsed = paymentSchema.safeParse(values);
+
+  if (!parsed.success) {
+    return { error: "Revisá los datos del formulario." };
+  }
+
+  const data = parsed.data;
+
+  try {
+    const gymId = await getCurrentGymId();
+    const supabase = await createClient();
+
+    const result = await renewMembership(supabase, gymId, memberId, planId, data.paid_at);
+
+    if ("error" in result) {
+      return { error: result.error };
+    }
+
+    const { error: paymentError } = await supabase.from("payments").insert({
+      gym_id: gymId,
+      member_id: memberId,
+      membership_id: result.membershipId,
+      amount: Number(data.amount),
+      paid_at: data.paid_at,
+      method: data.method,
+      notes: data.notes || null,
+    });
+
+    if (paymentError) {
+      return { error: "El plan se renovó pero no pudimos registrar el pago. Cargalo a mano en el historial." };
+    }
+
+    revalidatePath(`/dashboard/alumnos/${memberId}`);
+    revalidatePath("/dashboard/pagos");
+    return { success: true as const, endDate: result.endDate };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "No hay una sesión activa. Iniciá sesión de nuevo.",
+    };
+  }
+}
+
+export async function registerPaymentOnly(memberId: string, values: PaymentFormValues) {
+  const parsed = paymentSchema.safeParse(values);
+
+  if (!parsed.success) {
+    return { error: "Revisá los datos del formulario." };
+  }
+
+  const data = parsed.data;
+
+  try {
+    const gymId = await getCurrentGymId();
+    const supabase = await createClient();
+
+    const { data: activeMembership } = await supabase
+      .from("memberships")
+      .select("id")
+      .eq("member_id", memberId)
+      .eq("gym_id", gymId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    const { error } = await supabase.from("payments").insert({
+      gym_id: gymId,
+      member_id: memberId,
+      membership_id: activeMembership?.id ?? null,
+      amount: Number(data.amount),
+      paid_at: data.paid_at,
+      method: data.method,
+      notes: data.notes || null,
+    });
+
+    if (error) {
+      return { error: "No pudimos registrar el pago. Intentá de nuevo." };
+    }
+
+    revalidatePath(`/dashboard/alumnos/${memberId}`);
+    revalidatePath("/dashboard/pagos");
     return { success: true as const };
   } catch (err) {
     return {

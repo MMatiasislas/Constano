@@ -255,3 +255,7 @@ export type Payment = {
   notes: string | null;
   created_at: string;
 };
+
+export type PaymentWithMember = Payment & {
+  members: Pick<Member, "id" | "first_name" | "last_name" | "phone" | "photo_url">;
+};
