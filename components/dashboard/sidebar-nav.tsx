@@ -28,6 +28,7 @@ const navItems = [
 const configSubItems = [
   { href: "/dashboard/configuracion/retencion", label: "Retención" },
   { href: "/dashboard/configuracion/mensajes", label: "Mensajes" },
+  { href: "/dashboard/configuracion/planes", label: "Planes" },
 ];
 
 function isPathActive(pathname: string, href: string) {

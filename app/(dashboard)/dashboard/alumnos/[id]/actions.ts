@@ -1,10 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { format } from "date-fns";
 
+import { getCurrentGymId } from "@/lib/auth/get-gym-id";
 import { createClient } from "@/lib/supabase/server";
 import { deleteMemberPhoto, uploadMemberPhoto } from "@/lib/storage/member-photos";
+import { calcularFechaVencimiento } from "@/lib/payments";
 import { memberFormSchema, type MemberFormValues } from "@/lib/validations/member";
+import { assignPlanSchema, type AssignPlanFormValues } from "@/lib/validations/plan";
 import type { MemberStatus } from "@/types/db";
 
 export async function updateMemberStatus(id: string, status: MemberStatus) {
@@ -88,4 +92,68 @@ export async function updateMember(
   revalidatePath(`/dashboard/alumnos/${id}`);
   revalidatePath("/dashboard/alumnos");
   return { success: true as const, warning: photoWarning };
+}
+
+export async function assignPlan(memberId: string, values: AssignPlanFormValues) {
+  const parsed = assignPlanSchema.safeParse(values);
+
+  if (!parsed.success) {
+    return { error: "Revisá los datos del formulario." };
+  }
+
+  const data = parsed.data;
+
+  try {
+    const gymId = await getCurrentGymId();
+    const supabase = await createClient();
+
+    const { data: plan, error: planError } = await supabase
+      .from("plans")
+      .select("duration_days")
+      .eq("id", data.plan_id)
+      .eq("gym_id", gymId)
+      .single();
+
+    if (planError || !plan) {
+      return { error: "No encontramos el plan elegido. Recargá la página e intentá de nuevo." };
+    }
+
+    // Un alumno tiene una sola membership activa a la vez: la anterior (si
+    // había) se expira acá antes de crear la nueva.
+    const { error: expireError } = await supabase
+      .from("memberships")
+      .update({ status: "expired" })
+      .eq("member_id", memberId)
+      .eq("gym_id", gymId)
+      .eq("status", "active");
+
+    if (expireError) {
+      return { error: "No pudimos actualizar el plan anterior. Intentá de nuevo." };
+    }
+
+    const endDate = format(
+      calcularFechaVencimiento(data.start_date, plan.duration_days),
+      "yyyy-MM-dd"
+    );
+
+    const { error: insertError } = await supabase.from("memberships").insert({
+      gym_id: gymId,
+      member_id: memberId,
+      plan_id: data.plan_id,
+      start_date: data.start_date,
+      end_date: endDate,
+      status: "active",
+    });
+
+    if (insertError) {
+      return { error: "No pudimos asignar el plan. Intentá de nuevo." };
+    }
+
+    revalidatePath(`/dashboard/alumnos/${memberId}`);
+    return { success: true as const };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "No hay una sesión activa. Iniciá sesión de nuevo.",
+    };
+  }
 }

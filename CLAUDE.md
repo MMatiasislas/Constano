@@ -256,3 +256,74 @@ existía (apuntaba a esta página, que no existía hasta ahora).
   - Migración 005 (`gyms.settings jsonb`) corrida por Matías — confirmado con la columna
     funcionando (antes de correrla, el guardado tiraba `column gyms.settings does not exist`,
     esperable).
+
+## Semana 6, Bloque A: Pagos internos — CRUD de planes + asignar membership (probado end-to-end)
+Gestión 100% manual (el gym registra a mano quién pagó qué). La integración de cobros online
+(Stripe/MP, para que el gym te pague la suscripción a vos) es Semana 9, no se tocó nada de eso acá.
+Las tablas `plans`/`memberships`/`payments` ya existían en Supabase desde Semana 0 (con RLS ya
+activa, `plans_all_same_gym`/`memberships_all_same_gym`); esta sesión no corrió ninguna migración
+nueva. `payments` sigue sin usarse (es del Bloque B, historial de pagos).
+- types/db.ts: `Plan`, `MembershipStatus`, `Membership`, `MembershipWithPlan` (con `plans`
+  embebido), `PAYMENT_METHODS` (definido ya para el Bloque B, sin uso todavía) y `Payment`.
+- lib/validations/plan.ts: `planFormSchema` (price/duration_days son strings numéricos
+  requeridos, no el patrón `numericStringField` opcional de rutinas) y `assignPlanSchema`
+  (`plan_id`/`start_date`).
+- lib/payments.ts: `diasHastaVencimiento(endDate)` — parsea el string `"YYYY-MM-DD"` a mano
+  (`split("-")` + `Date.UTC`) en vez de `new Date(endDate)`, por el mismo motivo que
+  `parseFechaLocal`; compara contra "hoy" en horario de Argentina reusando
+  `getDatePartsInBA()` de `lib/attendance.ts`. `calcularFechaVencimiento(startDate, durationDays)`
+  usa `parseFechaLocal` + `addDays` de date-fns. `getMembershipStatus()` es la función clave:
+  **no hay cron que pase una membership vencida a `status: 'expired'`** — la columna se queda en
+  `'active'` para siempre salvo que se asigne un plan nuevo (ahí sí se expira, ver
+  `assignPlan`). Por eso "vencido"/"vence pronto" se calculan siempre comparando fechas en el
+  momento de mostrar, nunca confiando solo en la columna `status`. Umbral de "vence pronto": 7
+  días o menos.
+- app/(dashboard)/dashboard/configuracion/planes/: página + `actions.ts`
+  (`createPlan`/`updatePlan`/`togglePlan`/`deletePlan`), mismo patrón exacto que
+  `configuracion/retencion` (Semana 5 Bloque A): reglas sugeridas que insertan directo sin abrir
+  el dialog (`components/planes/planes-sugeridos.tsx`, calca `reglas-sugeridas.tsx`), dialog
+  inline compartido create/edit (`plan-form.tsx`), toggle optimista (`plan-toggle.tsx`, mismo
+  patrón "ajustar estado durante el render" que `regla-toggle.tsx`).
+  - `deletePlan` primero cuenta `memberships` con ese `plan_id` (`count: "exact", head: true`);
+    si hay alguna (de cualquier `status`, no solo activa), devuelve error sugiriendo desactivar
+    en vez de eliminar — probado en vivo contra un plan con una membership ya expirada, bloqueó
+    el borrado correctamente.
+- **Asignar/cambiar plan desde la ficha del alumno** (`components/planes/asignar-plan-dialog.tsx`
+  + `assignPlan()` agregado a `app/(dashboard)/dashboard/alumnos/[id]/actions.ts`): un alumno
+  tiene como máximo una membership `status = 'active'` a la vez. `assignPlan` hace, en este
+  orden: 1) trae `duration_days` del plan elegido, 2) `update` de cualquier membership
+  `active` del alumno a `expired`, 3) `insert` de la nueva con `end_date` calculado
+  (`calcularFechaVencimiento` + `format(..., "yyyy-MM-dd")`). El Select de plan usa el mismo
+  sentinel `""` (no `undefined`) documentado en el gotcha de Bloque A de retención para arrancar
+  vacío sin warning de Base UI de "uncontrolled to controlled".
+  - Header de la ficha del alumno (`PlanInfo` en `alumnos/[id]/page.tsx`): si no hay membership
+    activa muestra "Sin plan asignado" + botón "Asignar plan"; si hay, muestra
+    `{plan.name} · Badge de estado (color por `getMembershipStatusColor`) · Vence el {fecha}` +
+    botón "Cambiar plan" (mismo componente `AsignarPlanDialog`, solo cambia el label). La query
+    del alumno ahora trae en paralelo la membership activa (`*, plans(*)`, `.maybeSingle()`) y
+    los planes activos del gym (para el Select del dialog).
+  - **Verificación de la idempotencia de "una sola activa" sin acceso directo a Supabase Table
+    Editor en esta sesión** (no había sesión iniciada en el dashboard de Supabase del browser):
+    se confía en que `.maybeSingle()` sobre `status = 'active'` lanza error si encuentra más de
+    una fila — como el segundo cambio de plan (de "3 veces por semana" a "Plan Trimestral")
+    renderizó limpio sin error, es evidencia indirecta fuerte de que la membership anterior sí
+    quedó `expired`. Si hace falta confirmarlo de forma directa en una sesión futura, loguearse
+    en el Table Editor y chequear la tabla `memberships` del alumno de prueba.
+  - Sidebar: se sumó "Planes" a `configSubItems` en `components/dashboard/sidebar-nav.tsx`
+    (tercer sub-item bajo "Configuración", junto a Retención y Mensajes).
+- **Probado end-to-end en el browser contra datos reales** (gym "Setteria"): estado vacío de
+  Planes → crear el plan sugerido "3 veces por semana" ($15.000/30 días) → crear uno personalizado
+  a mano "Plan Trimestral" ($40.000/90 días) → desactivar y reactivar con el toggle → en la ficha
+  de "Matias islas" (sin plan) → "Asignar plan" → elegir "3 veces por semana", fecha de inicio hoy
+  (24/08/2026, precargada) → header muestra "3 veces por semana · Al día · Vence el 23/09/2026"
+  (30 días exactos, cálculo correcto) → "Cambiar plan" a "Plan Trimestral" → header actualiza a
+  "Plan Trimestral · Al día · Vence el 22/11/2026" (90 días exactos) → intentar eliminar "3 veces
+  por semana" (que ya tiene memberships asociadas) → toast de error sugiriendo desactivar en vez
+  de eliminar, tal como se pidió. Sin errores ni warnings de consola. No se probaron en vivo los
+  estados "vence pronto"/"vencido" (necesitarían una fecha de vencimiento pasada o próxima, no
+  se manipuló la fecha del sistema ni se editó `end_date` a mano en la DB) — la lógica de
+  `getMembershipStatus` está cubierta por `tsc`/`eslint` pero no por una prueba visual de esos
+  dos estados; si aparece algo raro con esos badges, revisar `lib/payments.ts` primero.
+  - El alumno de prueba usado fue el real "Matias islas" (no uno descartable como "Foto
+    Testing") — quedó con "Plan Trimestral" asignado (membership real, no se revirtió). Avisado
+    en el resumen de esta sesión, no se dio de baja nada.

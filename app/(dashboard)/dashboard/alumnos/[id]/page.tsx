@@ -14,6 +14,7 @@ import {
   parseFechaLocal,
   whatsappHref,
 } from "@/lib/members";
+import { getMembershipStatus, getMembershipStatusColor, getMembershipStatusLabel } from "@/lib/payments";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,14 @@ import { NuevaRutinaDialog } from "@/components/rutinas/nueva-rutina-dialog";
 import { RutinaAcciones } from "@/components/rutinas/rutina-acciones";
 import { DuplicarRutinaDialog } from "@/components/rutinas/duplicar-rutina-dialog";
 import { AlumnoAsistenciaTab } from "@/components/asistencia/alumno-asistencia-tab";
-import type { AttendanceWithCheckedBy, Member, RoutineWithDayCount } from "@/types/db";
+import { AsignarPlanDialog } from "@/components/planes/asignar-plan-dialog";
+import type {
+  AttendanceWithCheckedBy,
+  Member,
+  MembershipWithPlan,
+  Plan,
+  RoutineWithDayCount,
+} from "@/types/db";
 
 function calcularEdad(birthDate: string | null) {
   if (!birthDate) return null;
@@ -47,7 +55,13 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: member }, { data: routinesData }, { data: attendancesData }] = await Promise.all([
+  const [
+    { data: member },
+    { data: routinesData },
+    { data: attendancesData },
+    { data: membershipData },
+    { data: activePlansData },
+  ] = await Promise.all([
     supabase.from("members").select("*").eq("id", id).single(),
     supabase
       .from("routines")
@@ -60,6 +74,13 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
       .eq("member_id", id)
       .order("checked_in_at", { ascending: false })
       .limit(60),
+    supabase
+      .from("memberships")
+      .select("*, plans(*)")
+      .eq("member_id", id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase.from("plans").select("*").eq("active", true).order("price", { ascending: true }),
   ]);
 
   if (!member) {
@@ -68,6 +89,8 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
 
   const routinas = (routinesData ?? []) as RoutineWithDayCount[];
   const attendances = (attendancesData ?? []) as AttendanceWithCheckedBy[];
+  const membership = (membershipData ?? null) as MembershipWithPlan | null;
+  const planesActivos = (activePlansData ?? []) as Plan[];
 
   const alumno = member as Member;
   const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
@@ -112,6 +135,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
                 </a>
               </div>
             )}
+            <PlanInfo membership={membership} planesActivos={planesActivos} memberId={alumno.id} />
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -170,6 +194,53 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
           <PlaceholderTab text="Próximamente - Semana 4" />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function PlanInfo({
+  membership,
+  planesActivos,
+  memberId,
+}: {
+  membership: MembershipWithPlan | null;
+  planesActivos: Plan[];
+  memberId: string;
+}) {
+  const status = getMembershipStatus(membership);
+  const defaultStartDate = format(new Date(), "yyyy-MM-dd");
+
+  if (!membership) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Sin plan asignado</span>
+        <AsignarPlanDialog
+          memberId={memberId}
+          planes={planesActivos}
+          defaultStartDate={defaultStartDate}
+          triggerLabel="Asignar plan"
+          triggerVariant="outline"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm text-foreground">{membership.plans.name}</span>
+      <Badge variant="outline" className={cn(getMembershipStatusColor(status))}>
+        {getMembershipStatusLabel(status)}
+      </Badge>
+      <span className="text-sm text-muted-foreground">
+        Vence el {format(parseFechaLocal(membership.end_date), "dd/MM/yyyy", { locale: es })}
+      </span>
+      <AsignarPlanDialog
+        memberId={memberId}
+        planes={planesActivos}
+        defaultStartDate={defaultStartDate}
+        triggerLabel="Cambiar plan"
+        triggerVariant="outline"
+      />
     </div>
   );
 }

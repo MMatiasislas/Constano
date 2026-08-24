@@ -209,3 +209,49 @@ export type RetentionAlertWithDetails = RetentionAlert & {
   >;
   retention_rules: Pick<RetentionRule, "id" | "name" | "days_without_attendance">;
 };
+
+export type Plan = {
+  id: string;
+  gym_id: string;
+  name: string;
+  price: number;
+  duration_days: number;
+  active: boolean;
+  created_at: string;
+};
+
+export type MembershipStatus = "active" | "expired" | "canceled";
+
+export type Membership = {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  plan_id: string;
+  start_date: string;
+  end_date: string;
+  status: MembershipStatus;
+  created_at: string;
+};
+
+export type MembershipWithPlan = Membership & { plans: Plan };
+
+export const PAYMENT_METHODS = [
+  { value: "efectivo", label: "Efectivo" },
+  { value: "transferencia", label: "Transferencia" },
+  { value: "tarjeta", label: "Tarjeta" },
+  { value: "otro", label: "Otro" },
+] as const;
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number]["value"];
+
+export type Payment = {
+  id: string;
+  gym_id: string;
+  member_id: string;
+  membership_id: string | null;
+  amount: number;
+  paid_at: string;
+  method: string;
+  notes: string | null;
+  created_at: string;
+};
