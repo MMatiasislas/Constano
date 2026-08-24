@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { AlumnosFiltros } from "@/components/alumnos/alumnos-filtros";
+import { ImportarExcelDialog } from "@/components/alumnos/importar-excel/importar-dialog";
 import type { Member, MemberStatus } from "@/types/db";
 
 const PAGE_SIZE = 20;
@@ -96,10 +97,13 @@ export default async function AlumnosPage({ searchParams }: PageProps) {
             {activeCount ?? 0} alumnos activos de {totalCount ?? 0} totales
           </p>
         </div>
-        <Button nativeButton={false} render={<Link href="/dashboard/alumnos/nuevo" />}>
-          <PlusIcon />
-          Nuevo alumno
-        </Button>
+        <div className="flex items-center gap-2">
+          <ImportarExcelDialog />
+          <Button nativeButton={false} render={<Link href="/dashboard/alumnos/nuevo" />}>
+            <PlusIcon />
+            Nuevo alumno
+          </Button>
+        </div>
       </div>
 
       {(totalCount ?? 0) === 0 ? (
@@ -107,9 +111,12 @@ export default async function AlumnosPage({ searchParams }: PageProps) {
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
             <UsersIcon className="size-8 text-muted-foreground" />
             <p className="font-medium">Todavía no tenés alumnos cargados</p>
-            <Button nativeButton={false} render={<Link href="/dashboard/alumnos/nuevo" />}>
-              Cargar el primero
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button nativeButton={false} render={<Link href="/dashboard/alumnos/nuevo" />}>
+                Cargar el primero
+              </Button>
+              <ImportarExcelDialog />
+            </div>
           </CardContent>
         </Card>
       ) : (

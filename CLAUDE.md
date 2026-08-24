@@ -407,3 +407,174 @@ Nuevo: `lib/validations/payment.ts`, ampliaciones en `lib/payments.ts` y en
   Matías en el mismo browser. Al usar "Cobrar y renovar" sobre ese mismo alumno el plan volvió a
   quedar en 90 días correctos (22/11/2026), así que no bloqueó nada — solo queda como dato para
   no sorprenderse si se repite.
+
+## Semana 7: Dashboard de Inicio con KPIs reales + gráficos (completo, probado end-to-end)
+La home (`app/(dashboard)/dashboard/page.tsx`) pasa de 3 cards básicas (Alumnos/Rutinas/Alertas)
+a un panel de control real. Se **eliminó** la card de Rutinas (no pedida en el nuevo diseño).
+Nueva dependencia: `recharts` (`^3.10.1`), primera vez que se usa en el proyecto.
+
+- **`lib/dashboard-stats.ts`** (nuevo, server-only): 9 helpers, cada uno recibe `gymId` explícito
+  y hace su propio `createClient()` — mismo patrón que `lib/retention-alerts-engine.ts`, no
+  `getCurrentGymId()` adentro de cada uno (se resuelve una sola vez en la página y se pasa).
+  - `getActiveMembersCount`: cuenta activos hoy vs. activos que ya estaban dados de alta hace
+    30+ días — es una **aproximación**, no un snapshot histórico real (no contempla bajas en el
+    medio), documentado así a propósito porque así lo pidió la tarea.
+  - `getMonthlyRevenue`/`getAttendanceLast14Days`: usan límites de mes/día en horario de
+    Argentina (`getDatePartsInBA` de `lib/attendance.ts`), mismo patrón que
+    `getStartOfDayISO`/`getEndOfDayISO` pero para rangos de mes y de 14 días.
+  - `getMembershipStatusBreakdown`: reusa `getMembershipStatus` de `lib/payments.ts` tal cual
+    (mismo criterio que el panel `/dashboard/pagos` de Semana 6) — no duplica la lógica de
+    vencimiento.
+  - `getOpenRetentionAlertsCount`/`getRecentRetentionAlerts`: "abiertas" = `active` + `contacted`,
+    mismo criterio que ya usaba la home vieja (no el del badge del sidebar, que es solo `active`
+    — la distinción entre esos dos criterios ya estaba documentada desde Semana 5 Bloque C).
+  - `getUpcomingBirthdays`: compara mes/día del `birth_date` ignorando el año (parseado a mano
+    con `split("-")`, no vía `parseFechaLocal`, porque acá no importa la hora ni el timezone de
+    parseo, solo los componentes de fecha calendario) contra "hoy" en Buenos Aires: si el
+    cumpleaños de este año ya pasó, se compara contra el del año que viene. Ventana de 30 días.
+- **Gráficos son Client Components** (`components/dashboard/attendance-chart.tsx` — BarChart de
+  14 días — y `components/dashboard/membership-status-chart.tsx` — dona de 4 estados), la página
+  sigue siendo un Server Component que les pasa los datos ya calculados como props.
+  - Colores: barra usa `var(--primary)` (se invierte solo con el tema, igual que
+    botones/badges); la dona usa los mismos 4 colores que los badges de estado de cuota
+    (`#10b981`/`#f59e0b`/`#ef4444`/`#9ca3af`) pero en hex fijo, no CSS vars — un slice de gráfico
+    no necesita adaptarse a claro/oscuro, igual que el punto de color de un badge no lo hace.
+  - Mark specs aplicados (gráficos de calidad, no placeholders): barras con esquinas superiores
+    redondeadas de 4px y grosor tope 24px, gridlines hairline sólidas (nunca punteadas), tooltip
+    con hover en ambos gráficos, leyenda siempre visible con los números al lado de cada color en
+    la dona (nunca color solo).
+  - **Bug real encontrado y arreglado probando en vivo**: la dona casi no se veía (un
+    sliver/arco mínimo en vez de un círculo completo) al primer render. Causa real: el
+    `ResponsiveContainer` de recharts estaba directo dentro de un contenedor `flex` sin ancho
+    fijo (`sm:flex-row`) — en ese contexto puede colapsar a un ancho ~0 porque un hijo flex sin
+    `flex-basis` explícito se mide por su contenido, y el `ResponsiveContainer` no tiene
+    contenido intrínseco hasta que JS mide su padre (problema clásico de "recharts dentro de
+    flexbox"). Fix: envolver el `ResponsiveContainer` en un `<div>` con tamaño fijo
+    (`h-[200px] w-[220px] shrink-0`) antes de meterlo en el flex row. **Si se agrega otro gráfico
+    de recharts dentro de un layout flex/grid, aplicar el mismo wrapper de tamaño fijo** — no
+    confiar en que `width="100%"` del propio `ResponsiveContainer` alcance.
+  - Un segundo momento donde pareció el mismo bug (un arco chiquito en vez de la dona completa)
+    en realidad era solo la **animación de entrada** de recharts (crece desde 0° hasta el
+    ángulo final en ~800ms) — un screenshot tomado inmediatamente después de cargar la página la
+    agarra a mitad de camino. No es un bug, solo hay que esperar un instante antes de comparar
+    visualmente un gráfico recién montado.
+  - Tooltip del `BarChart`: por default mostraba un separador `": "` sobre un `name` vacío
+    (`" : 1 check-ins"`, con los dos puntos sueltos) porque el `formatter` devuelve `[value, ""]`
+    — se arregló con la prop `separator=""` del `Tooltip` de recharts.
+- Estados vacíos manejados en cada sección de forma independiente (no toda la página junta):
+  KPI de alumnos con 0 muestra "Todavía no cargaste alumnos" en vez del indicador de variación;
+  el `BarChart`/dona se reemplazan por un mensaje de texto si no hay datos en el rango
+  (`EmptyChartState`); las 3 listas (alertas/pagos/cumpleaños) tienen su propio texto vacío
+  (`EmptyListState`).
+- `components/dashboard/kpi-card.tsx`: componente compartido para las 4 cards de KPI — si
+  recibe `href`, envuelve toda la card en un `<Link>` de Next (la de "Alertas de retención" es la
+  única que lo usa, apunta a `/dashboard/retencion`).
+- **No se pudo verificar el layout mobile con un viewport angosto real**: la herramienta de
+  resize de ventana del browser de esta sesión no afectó la resolución de captura de pantalla
+  (limitación del entorno, no del código). El responsive se armó con las mismas clases Tailwind
+  ya usadas en el resto del proyecto (`grid-cols-2 lg:grid-cols-4`, etc.) pero no hay una
+  captura mobile real de esta pantalla — si se nota algo raro en el celular, revisar ahí primero.
+- **Probado end-to-end en el browser contra datos reales** (gym "Setteria"): las 4 KPI cards con
+  números reales (1 alumno activo, $35.000 de ingresos del mes — suma de los 3 pagos cargados en
+  Semana 6 —, 0% de asistencia semanal, 0 alertas con "Todo bajo control" en verde) → gráfico de
+  asistencia en estado vacío ("Todavía no hay asistencias...") → se marcó una asistencia real
+  desde `/dashboard/asistencia` para el alumno real → recargando el dashboard, la asistencia
+  semanal subió a 100% y apareció una barra real en el gráfico de 14 días (con tooltip
+  "24/08 · 1 check-ins" al hacer hover) → dona mostrando "Al día 1 (100%)" → las 3 listas
+  (alertas/pagos/cumpleaños) con datos reales o su estado vacío correspondiente → click en un
+  pago de la lista navegó correctamente al detalle del alumno. Sin errores ni warnings de
+  consola en toda la sesión después de los dos fixes de arriba.
+
+## Semana 8, Bloque A: importación masiva de alumnos desde Excel/CSV (completo, probado end-to-end)
+Wizard de 4 pasos en `components/alumnos/importar-excel/` (todo Client Components, orquestados
+por `importar-dialog.tsx`), botón "Importar desde Excel" al lado de "Nuevo alumno" en
+`/dashboard/alumnos` (y también en el estado vacío). Nueva dependencia: **`xlsx` (SheetJS)
+instalada desde el CDN propio de SheetJS, no desde npm** —
+`npm install https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz`, ver gotcha de seguridad abajo.
+El parseo del archivo es 100% client-side; el insert final pasa por Server Action
+(`app/(dashboard)/dashboard/alumnos/importar/actions.ts`).
+
+- **Gotcha de seguridad, no solo de código**: la versión de `xlsx` publicada en el registry de
+  npm (0.18.5) tiene 2 CVEs sin parche ahí (prototype pollution, ReDoS) — SheetJS solo publica la
+  versión arreglada en su propio CDN, no en npm, por una decisión de ellos. Se confirmó con
+  Matías antes de instalar y se eligió el CDN. **Si en algún momento `npm install`/`npm ci` falla
+  o alguien reinstala `node_modules` sin el `package.json` ya pinneado a esa URL, revisar que
+  `package.json` siga apuntando a `https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz` y no a
+  `xlsx` de npm** — instalar desde npm por error reintroduce las 2 vulnerabilidades.
+- **Paso 1 (subir archivo)**: `components/alumnos/importar-excel/parse-archivo.ts`,
+  `parsearArchivoExcel(file)`. **Bug real encontrado y arreglado probando en vivo**: un `.csv` en
+  UTF-8 (con tildes/ñ) se leía con mojibake ("MarÃa" en vez de "María") al pasarlo como
+  `ArrayBuffer` crudo con `XLSX.read(buffer, {type: "array"})` — SheetJS adivina el codepage de un
+  CSV sin BOM y adivinaba mal. Fix: si el archivo es `.csv`, se lee como texto con `file.text()`
+  (que decodifica UTF-8 según el spec de la Web API) y se le pasa a `XLSX.read(texto, {type:
+  "string"})`, bypaseando la adivinanza de codepage por completo. Un `.xlsx`/`.xls` sí es binario
+  real y sigue leyéndose con `file.arrayBuffer()` + `{type: "array"}`. **Si aparece mojibake en
+  otro parseo de archivo de texto subido por el usuario en el futuro, sospechar lo mismo: revisar
+  si se está pasando como buffer binario en vez de decodificar como texto explícitamente.**
+- **Paso 2 (mapeo de columnas)**: `lib/validations/member-import.ts`, `detectarMapeoColumna(header)`
+  — normaliza el header (`NFD` + saca diacríticos + minúsculas) y matchea contra keywords por
+  campo, en el orden de `IMPORT_FIELDS`. El orden importa a propósito: `first_name` (con la
+  keyword genérica `"nombre"`) se chequea antes que `last_name` (`"apellido"`), así una columna
+  "Nombre y Apellido" sugiere `first_name` (combinado) en vez de `last_name`, tal como pidió el
+  producto.
+- **Paso 3 (preview + validación + duplicados)**: `components/alumnos/importar-excel/procesar-filas.ts`,
+  función pura `procesarFilas(rows, mapping, existingMembers)`.
+  - Parseo tolerante de fecha (`parseFechaImportacion`, en `lib/validations/member-import.ts`):
+    prueba `dd/MM/yyyy` → `d/M/yyyy` → `MM/dd/yyyy` → `yyyy-MM-dd` → `dd-MM-yyyy` en ese orden con
+    `date-fns/parse` + `isValid`; el primer formato que da una fecha válida gana. Prioriza
+    dd/MM (convención argentina) pero cae a MM/dd si dd/MM da un mes imposible (ej. "08/24/2026"
+    → día=08/mes=24 inválido → prueba MM/dd → mes=08/día=24 válido). Devuelve `null` si ningún
+    formato calza — el campo se descarta en silencio, no hace fallar la fila (excepto
+    `joined_at`, que si no se pudo parsear cae a la fecha de hoy como default).
+  - Frecuencia semanal tolerante (`parseFrecuenciaImportacion`): acepta `"3"`, `"3x"`, `"5x/sem"`,
+    `"libre"/"Libre"` (→ `null`, mismo sentinel que el resto de la app) — extrae el primer número
+    con `/\d+/` y lo clampea a 1-6 (fuera de rango o sin número reconocible → `null`/libre, nunca
+    error de fila). La frecuencia nunca bloquea una importación.
+  - **Único motivo de error de fila implementado: falta el nombre.** Cualquier otro dato mal
+    formado (fecha rota, email inválido) se descarta en silencio para ese campo en vez de tirar
+    la fila entera — decisión de producto para maximizar cuántas filas del Excel entran, dado que
+    la tarea solo pidió "falta el nombre, por ejemplo" como caso de error explícito.
+  - Duplicados: se compara **nombre completo normalizado** (trim + lowercase + espacios
+    colapsados) O **teléfono normalizado** (solo dígitos, mismo criterio que `whatsappHref` en
+    `lib/members.ts`) contra TODOS los members del gym (activos e inactivos, no solo la página
+    actual) — `getExistingMembersForImport()` en `actions.ts` trae esa lista liviana aparte del
+    listado paginado normal.
+- **Paso 4 (importar)**: `importMembers(rows)` en `actions.ts`. Un solo `insert(array)` para todas
+  las filas "nueva" y un solo `upsert(array, {onConflict: "id"})` para todas las "duplicado →
+  actualizar" — no N llamadas individuales. La validación con `memberImportRowSchema` se repite
+  server-side (defensa extra, nunca confiar en los datos tal cual llegan del cliente).
+  - **Defensa agregada**: si dos filas del Excel matchean al mismo alumno existente (ej. mismo
+    teléfono repetido en dos filas), un `upsert` con la misma PK dos veces en el mismo array
+    rompe en Postgres (`ON CONFLICT DO UPDATE command cannot affect row a second time`). Se
+    deduplica por `existingId` con un `Map` antes de armar el array de upsert (gana la última
+    fila) — no se llegó a probar este caso en vivo (el archivo de prueba no lo tenía), pero es un
+    fix barato para un error real de Postgres, no una hipótesis.
+  - Confiado en RLS para que un `existingId` no pueda pertenecer a otro gym — mismo criterio ya
+    usado en `updateMemberStatus` (Semana 2): la fila queda invisible bajo `using` si es de otro
+    tenant, y el upsert intentaría un insert con esa PK ya ocupada, que falla por conflicto de
+    clave en vez de pisar datos ajenos.
+- **Probado end-to-end en el browser contra datos reales** (gym "Setteria"): CSV de 10 filas con
+  columnas de nombres distintos a los esperados ("Nombre Completo", "Tel", "Cumpleaños", "Fecha
+  de Ingreso", "Frecuencia", "Notas") → auto-mapeo detectó las 6 correctamente sin tocar nada →
+  preview mostró "8 nuevas · 1 duplicado · 1 con error" (fila sin nombre → "Falta el nombre"; fila
+  "Matias islas" con nombre igual al alumno real → "Ya existe: Matias islas") → cambiar el
+  duplicado a "Actualizar" → "Importar 9 alumnos" → resultado "Se importaron 8 alumnos nuevos. Se
+  actualizaron 1. Se omitieron 1." → confirmado en el listado. Fechas mixtas dd/MM/yyyy y
+  yyyy-MM-dd en el mismo archivo, ambas parseadas bien. Sin errores de consola después del fix de
+  encoding.
+  - **Efecto secundario real de la prueba, corregido en la misma sesión**: la fila de prueba
+    "Matias islas" (deliberadamente con el mismo nombre que el alumno real, para probar la
+    detección de duplicados) al marcarse "Actualizar" sobrescribió datos reales del alumno real
+    "Matias islas" — teléfono, email (quedó vacío, la columna no estaba en el CSV de prueba),
+    apellido (se perdió porque el CSV tenía "Nombre Completo" como un solo campo → todo cayó en
+    `first_name`, `last_name` quedó `null`), fecha de nacimiento y notas. **Esto no es un bug de
+    la feature — es el comportamiento esperado de "Actualizar" funcionando correctamente** (pisa
+    los datos del duplicado con los del Excel, tal como pide el producto), pero confirma que
+    conviene tener cuidado real al elegir "Actualizar" sobre un alumno real durante pruebas: se
+    restauraron a mano los valores originales de "Matias islas" (teléfono
+    `+542235507397`, email `matiasconia@gmail.com`, apellido `islas`, fecha de nacimiento y alta
+    `20/08/2026`, notas `Prueba Bloque B - edición funcionando`) inmediatamente después de
+    confirmarlo. Los 8 alumnos ficticios creados por la importación (Juan Pérez, María García,
+    Carlos Rodríguez, Ana Martínez, Lucía Fernández, Diego Sánchez, Sofía Torres, Pablo Ramírez)
+    se dieron de baja uno por uno al terminar, mismo criterio que "Foto Testing"/"Alerta Testing"
+    en sesiones anteriores.
