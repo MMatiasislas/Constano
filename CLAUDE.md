@@ -824,3 +824,73 @@ archivo bajo demanda.
   (acá afecta la URL que queda embebida en el PDF/WhatsApp si `lib/qr-checkin.ts`'s `getSiteUrl()` se
   reusara para esto; en la práctica esta feature no depende de esa variable porque la URL del PDF
   siempre es la de Supabase Storage, no la de la app).
+
+## Semana 10, Bloque A: landing pública de marketing (completa, probada end-to-end)
+
+Primera página pública de marketing del proyecto (hasta ahora todo era dashboard autenticado o
+`/checkin` minimalista). Vive en `app/page.tsx` (la raíz del dominio) y reemplaza el redirect
+automático que había antes (`redirect(user ? "/dashboard" : "/login")`): ahora la home siempre
+muestra la landing, esté logueado o no el visitante — el header solo cambia "Iniciar sesión" por
+"Ir al dashboard" según haya sesión (mismo criterio que cualquier SaaS). El acceso real al panel
+sigue siendo `/login` → `/dashboard`, sin cambios.
+
+- **Identidad visual nueva, deliberadamente distinta del resto del producto**: el dashboard es
+  gris/neutro a propósito (utilitario); la landing suma un acento **naranja vibrante** (clases
+  `orange-400/500/600` de Tailwind, sin tocar los CSS variables de `globals.css` que usa el resto
+  de la app) + una sección hero en `bg-neutral-950` (dark) con un glow radial difuminado detrás del
+  título, para dar impacto en el primer scroll. El resto de las secciones alternan
+  `bg-background`/`bg-muted/40` para dar ritmo, y el footer vuelve a `bg-neutral-950` (bookend con
+  el hero).
+- **Estructura**: `components/marketing/` — `landing-header.tsx` (client, sticky, menú hamburguesa
+  en mobile con estado propio), `hero-section.tsx` (con un "mock" del producto hecho con divs +
+  lucide-react, no una captura de pantalla real ni SVG externo: barras de asistencia + alerta de
+  retención + badge de check-in QR), `problem-section.tsx`, `features-section.tsx` (4 cards con
+  iconos `Dumbbell`/`AlertTriangle`/`QrCode`/`Wallet`), `how-it-works-section.tsx` (3 pasos con
+  línea conectora en desktop, oculta en mobile), `pricing-section.tsx` (4 cards, "Pro" destacado con
+  borde naranja + badge "Más elegido"), `final-cta-section.tsx`, `footer-section.tsx`.
+- **`reveal-on-scroll.tsx`**: wrapper client reutilizable (fade-in + slide-up sutil la primera vez
+  que una sección entra en viewport, vía `IntersectionObserver` + Tailwind `transition-all`, no
+  `tw-animate-css`) — respeta `motion-reduce` explícitamente. Se usa en casi todas las secciones,
+  con `delayMs` para escalonar cards dentro de una misma grilla.
+- **`lib/marketing.ts`**: `WHATSAPP_PLACEHOLDER_NUMBER = "5492235551234"` — **placeholder real,
+  comentado en el código, pendiente de que Matías lo reemplace** por el número real antes de
+  producción. Se usa en la card "Custom" de precios y en el footer (ambos con `whatsappHref` de
+  `lib/members.ts`, reusado tal cual).
+- **Precios**: Basic $30.000, Pro $50.000 (destacado), Max $80.000, Custom ("Hablanos por
+  WhatsApp") — todos con botón "Empezar gratis" → `/signup`, salvo Custom que abre WhatsApp con
+  el mensaje pedido.
+
+### Bug real encontrado y arreglado: navegación por ancla con `scroll-behavior: smooth`
+
+Se agregó `scroll-smooth` al `<html>` (para que los links del header a `#caracteristicas` /
+`#como-funciona` / `#precios` scrollearan con animación) y **la navegación por ancla dejó de
+funcionar por completo**: al clickear un link, el hash de la URL cambiaba pero la página nunca se
+movía — confirmado en vivo, no solo sospechado: se leyó `window.scrollY` directo por JS después de
+cada click y quedaba en 0 sin moverse ni siquiera esperando varios segundos. La primera hipótesis
+(equivocada) fue que el App Router de Next interceptaba el cambio de history y reseteaba el
+scroll; se descartó al comprobar con `location.hash = "#precios"` + `scroll-behavior: auto` que el
+salto instantáneo SÍ funcionaba perfecto (aterrizaba exacto en `elementTop - scroll-mt-20`). La
+causa real: **con `scroll-behavior: smooth` activo, tanto la navegación nativa por hash como
+`element.scrollIntoView({behavior:"smooth"})` llamado a mano se quedaban colgados indefinidamente
+sin animar nada**, un fallo puntual del entorno de browser automation usado para probar (no se
+verificó si ocurre en un Chrome real de usuario, pero el costo de la duda no vale la pena). Fix:
+se sacó `scroll-smooth` de `app/layout.tsx` y los links del header quedaron como `<a href="#id">`
+planos, sin ningún `onClick`/JS de por medio — el salto es instantáneo (no animado) pero 100%
+confiable en cualquier navegador. Cada sección con ancla tiene `scroll-mt-20` para no quedar tapada
+por el header sticky. **Lección para el resto del proyecto**: no asumir que `scroll-behavior:
+smooth` / `scrollIntoView({behavior:"smooth"})` van a completar la animación — si en algún momento
+se necesita re-agregar scroll suave, verificar con una lectura real de `window.scrollY` post-click,
+no alcanza con mirar que el hash cambió.
+
+- **Metadata de SEO**: `export const metadata` en `app/page.tsx` (title + description específicos
+  de la landing), sobreescribe el genérico del layout raíz solo para esta ruta. Favicon
+  (`app/favicon.ico`) ya existía, no se tocó.
+- **Probado end-to-end en el browser**: las 3 anclas del header (Características/Cómo
+  funciona/Precios) saltan a la sección correcta (confirmado con `window.scrollY` real, no solo
+  visual); mobile (viewport ~500px) con el menú hamburguesa abriendo/cerrando y linkeando bien,
+  header muestra "Ir al dashboard" logueado y "Iniciar sesión" deslogueado (probado cerrando sesión
+  de verdad y volviendo a `/`); botones "Empezar gratis"/CTA final → `/signup`; botón WhatsApp de
+  precios y footer con el placeholder correcto y el mensaje pedido, verificado decodificando el
+  `href` real. `tsc --noEmit` y `eslint` limpios.
+- **Pendiente para Matías**: reemplazar `WHATSAPP_PLACEHOLDER_NUMBER` en `lib/marketing.ts` por el
+  número real de WhatsApp antes de producción (2 usos: card "Custom" de precios y footer).
