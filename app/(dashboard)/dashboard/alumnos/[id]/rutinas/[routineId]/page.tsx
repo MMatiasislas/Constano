@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon, ChevronRightIcon, FileDownIcon } from "lucide-react";
+import { ArrowLeftIcon, ChevronRightIcon } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -10,11 +10,13 @@ import { monthLabel } from "@/lib/routines";
 import { Button } from "@/components/ui/button";
 import { EditarInfoRutinaDialog } from "@/components/rutinas/editar-info-rutina-dialog";
 import { RutinaDiasTabs } from "@/components/rutinas/rutina-dias-tabs";
+import { ExportarPdfButton } from "@/components/pdf/exportar-pdf-button";
+import { generateRoutinePdf } from "./pdf-actions";
 import type { Routine, RoutineDayWithExercises } from "@/types/db";
 
 type RoutineDetail = Routine & {
   routine_days: RoutineDayWithExercises[];
-  members: { first_name: string; last_name: string | null } | null;
+  members: { first_name: string; last_name: string | null; phone: string | null } | null;
 };
 
 type PageProps = {
@@ -27,7 +29,7 @@ export default async function RutinaDetallePage({ params }: PageProps) {
 
   const { data: routineData } = await supabase
     .from("routines")
-    .select("*, routine_days(*, routine_exercises(*)), members(first_name, last_name)")
+    .select("*, routine_days(*, routine_exercises(*)), members(first_name, last_name, phone)")
     .eq("id", routineId)
     .order("order_index", { referencedTable: "routine_days", ascending: true })
     .order("order_index", { referencedTable: "routine_days.routine_exercises", ascending: true })
@@ -46,6 +48,23 @@ export default async function RutinaDetallePage({ params }: PageProps) {
   const fechaCreacion = format(parseFechaLocal(routine.created_at.slice(0, 10)), "dd/MM/yyyy", {
     locale: es,
   });
+
+  // Server Action inline: captura routine.id por closure. Next permite este
+  // patrón (función definida en un Server Component con su propio "use
+  // server") para pasarla como prop a un Client Component sin tener que
+  // pasarle el id aparte y que el cliente arme la llamada.
+  async function generatePdf() {
+    "use server";
+    return generateRoutinePdf(routine!.id);
+  }
+
+  const memberPhone = routine.members?.phone ?? null;
+  const whatsapp = memberPhone
+    ? {
+        phone: memberPhone,
+        messagePrefix: `Hola ${nombreAlumno}! Acá está tu rutina "${routine.title}": `,
+      }
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,12 +101,13 @@ export default async function RutinaDetallePage({ params }: PageProps) {
           </div>
           <div className="flex items-center gap-2">
             <EditarInfoRutinaDialog routine={routine} memberId={id} />
-            <span title="Próximamente">
-              <Button variant="outline" disabled>
-                <FileDownIcon />
-                Exportar PDF
-              </Button>
-            </span>
+            <ExportarPdfButton
+              generatePdf={generatePdf}
+              whatsapp={whatsapp}
+              whatsappDisabledReason={
+                whatsapp ? undefined : "Este alumno no tiene teléfono cargado."
+              }
+            />
           </div>
         </div>
       </div>

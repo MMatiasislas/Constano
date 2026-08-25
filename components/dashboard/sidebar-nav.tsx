@@ -26,6 +26,7 @@ const navItems = [
 ];
 
 const configSubItems = [
+  { href: "/dashboard/configuracion/general", label: "General" },
   { href: "/dashboard/configuracion/retencion", label: "Retención" },
   { href: "/dashboard/configuracion/mensajes", label: "Mensajes" },
   { href: "/dashboard/configuracion/planes", label: "Planes" },

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon, ChevronRightIcon, FileDownIcon } from "lucide-react";
+import { ArrowLeftIcon, ChevronRightIcon } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { EditarInfoPlantillaDialog } from "@/components/plantillas/editar-info-plantilla-dialog";
 import { AsignarPlantillaDialog } from "@/components/plantillas/asignar-plantilla-dialog";
 import { PlantillaDiasTabs } from "@/components/plantillas/plantilla-dias-tabs";
+import { ExportarPdfButton } from "@/components/pdf/exportar-pdf-button";
+import { generateTemplatePdf } from "./pdf-actions";
 import type { TemplateWithDaysAndExercises } from "@/types/db";
 
 type PageProps = {
@@ -40,6 +42,13 @@ export default async function PlantillaDetallePage({ params }: PageProps) {
   const fechaCreacion = format(parseFechaLocal(template.created_at.slice(0, 10)), "dd/MM/yyyy", {
     locale: es,
   });
+
+  // Ver la nota equivalente en la vista de rutina: Server Action inline para
+  // pasarla como prop al Client Component sin exponer el id por separado.
+  async function generatePdf() {
+    "use server";
+    return generateTemplatePdf(template!.id);
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -77,12 +86,11 @@ export default async function PlantillaDetallePage({ params }: PageProps) {
           <div className="flex items-center gap-2">
             <EditarInfoPlantillaDialog template={template} />
             <AsignarPlantillaDialog template={template} />
-            <span title="Próximamente">
-              <Button variant="outline" disabled>
-                <FileDownIcon />
-                Exportar PDF
-              </Button>
-            </span>
+            <ExportarPdfButton
+              generatePdf={generatePdf}
+              whatsapp={null}
+              whatsappDisabledReason="Es una plantilla, todavía no tiene un alumno asignado."
+            />
           </div>
         </div>
       </div>

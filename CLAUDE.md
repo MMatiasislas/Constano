@@ -708,3 +708,119 @@ hay ninguna policy de RLS nueva para `anon`, a propósito.
   impresos/enviados en producción codifican lo que Vercel resuelva automáticamente vía
   `VERCEL_URL`, que puede no ser el dominio final que los alumnos vean.
     en sesiones anteriores.
+
+## Semana 9: exportar rutinas y plantillas a PDF (completo, probado end-to-end)
+
+Cada rutina de alumno y cada plantilla se puede exportar a un PDF con el logo del gimnasio,
+descargable y compartible por WhatsApp. El botón "Exportar PDF" (antes disabled) ahora genera el
+archivo bajo demanda.
+
+- **Migraciones (SQL mostrado al usuario, corridas por él en Supabase):**
+  - `008_gym_logo.sql`: agrega `gyms.logo_url varchar`.
+  - `009_gym_assets_storage_policies.sql`: 4 policies (select/insert/update/delete) sobre
+    `storage.objects` para el bucket `gym-assets`, mismo patrón que `member-photos` — cada gym solo
+    opera dentro de su carpeta `{gym_id}/`, usando `public.current_gym_id()` (ya existía desde
+    `001_enable_rls.sql`).
+  - **Bucket `gym-assets`** creado a mano en el dashboard de Supabase: público, 5MB máx, tipos
+    permitidos `image/jpeg,image/png,image/webp,image/svg+xml,application/pdf`. Estructura de
+    carpetas: `gym-assets/{gym_id}/logo.{ext}` para el logo, `gym-assets/{gym_id}/routines/{routine_id}.pdf`
+    para PDFs de rutinas y `gym-assets/{gym_id}/templates/{template_id}.pdf` para PDFs de plantillas
+    (subcarpetas distintas para no compartir namespace de archivos entre dos tablas con ids
+    independientes, aunque una colisión real de UUID es prácticamente imposible).
+
+- **Logo del gimnasio** (`/dashboard/configuracion/general`, página nueva, agregada como primer
+  ítem del sidebar de Configuración):
+  - **Decisión deliberada, no un descuido**: el uploader (`components/configuracion/gym-logo-upload.tsx`)
+    solo acepta **JPG y PNG**, aunque el bucket admite también WEBP y SVG. Motivo: `@react-pdf/renderer`
+    (la librería que arma el PDF) solo puede insertar imágenes JPG/PNG — es una limitación documentada
+    de la librería, no un bug. Si se aceptara WEBP/SVG, el logo se subiría bien pero aparecería
+    invisible en el PDF sin ningún aviso. `lib/storage/gym-logo-validation.ts` documenta esto en un
+    comentario.
+  - Mismo patrón que `photo-upload.tsx` de alumnos (Avatar + comprimir con `browser-image-compression`
+    si pesa más de 5MB), pero a diferencia de aquel, **sube inmediatamente al elegir el archivo** (no
+    espera a un submit de formulario aparte) — tiene más sentido acá porque no hay más campos
+    alrededor. `lib/storage/gym-logo.ts`: `uploadGymLogo(file, gymId)` / `deleteGymLogo(gymId)`,
+    mismo cache-bust `?v=timestamp` que las fotos de alumnos.
+  - Server Actions en `app/(dashboard)/dashboard/configuracion/general/actions.ts`: `uploadGymLogo`
+    (sube y guarda `gyms.logo_url`) y `deleteGymLogo` (borra del bucket y limpia la columna).
+
+- **Template del PDF** (`components/pdf/routine-pdf-template.tsx`): componente de `@react-pdf/renderer`
+  (`Document`/`Page`/`View`/`Text`/`Image` de esa librería, no HTML/CSS) compartido entre rutinas y
+  plantillas — `memberName: null` hace que muestre "Plantilla" en vez de un nombre de alumno y oculta
+  el mes. Header: logo (40×40, `objectFit: contain`) + nombre del gym si hay logo, o el nombre del gym
+  solo en texto grande (22pt) si no hay. Por cada día: subtítulo + tabla de ejercicios. **Columnas
+  dinámicas**: Series/Reps/Peso/Descanso/Notas se ocultan si NINGÚN ejercicio de TODA la rutina (no
+  día por día) tiene ese dato cargado — así una rutina sin pesos cargados no deja una columna "Peso"
+  vacía en todas las filas. Formato de celdas igual al de la UI existente (`${weight}kg`,
+  `${rest_seconds}"`). Footer fijo (`fixed`) con nombre del gym + "Generado con Constano". Cada fila
+  de tabla tiene `wrap={false}` para que nunca se corte una fila a la mitad entre dos páginas; el
+  título de cada día tiene `minPresenceAhead={60}` para evitar que quede solo al final de una página
+  sin ninguna fila debajo.
+  - **Gotcha real de ESLint**: `jsx-a11y/alt-text` tira warning en el `<Image>` de `@react-pdf/renderer`
+    porque el linter no distingue ese componente del `<img>` de HTML — pero el `Image` de react-pdf
+    ni siquiera tiene prop `alt` en su tipo (los PDFs no tienen accesibilidad de imagen igual que el
+    HTML). Se silenció con un `eslint-disable-next-line` puntual, comentado.
+
+- **Generación** (`.../rutinas/[routineId]/pdf-actions.ts` y `.../plantillas/[templateId]/pdf-actions.ts`,
+  Server Actions): traen la rutina/plantilla completa con días+ejercicios (+ member para rutinas),
+  renderizan con `renderToBuffer` (import dinámico de `@react-pdf/renderer` dentro de la función,
+  igual patrón que `html5-qrcode` en Bloque B) y suben el buffer al bucket con `upsert: true` — **se
+  regenera y sobreescribe en cada click**, nunca se cachea, así el PDF siempre refleja la última
+  edición. `next.config.ts` suma `serverExternalPackages: ["@react-pdf/renderer"]` (la forma estable,
+  no-experimental en Next 15+) porque esta librería trae dependencias nativas de Node (fontkit,
+  png-js) que rompen si el bundler intenta empaquetarlas.
+  - **La URL pública se pide con `getPublicUrl(path, { download: nombreDeArchivo })`** — no es
+    cosmético: ese parámetro le pide a Supabase Storage que devuelva `Content-Disposition: attachment`,
+    lo que fuerza la descarga real incluso siendo una URL de otro origen (el atributo HTML `download`
+    de un `<a>` normal NO fuerza descarga cross-origin, así que sin esto el botón "Descargar PDF"
+    simplemente abriría el PDF en una pestaña). Confirmado con `curl -D -` que el header llega.
+  - `lib/pdf/filename.ts`: `pdfFileName(title)` arma el nombre sugerido de descarga a partir del
+    título (slug sin acentos).
+
+- **Integración en la UI**: `components/pdf/exportar-pdf-button.tsx`, un solo componente client
+  compartido por la vista de rutina y la de plantilla. Al click: loading → llama al Server Action →
+  abre un `Dialog` con "Descargar PDF" y "Compartir por WhatsApp". El botón de WhatsApp se muestra
+  deshabilitado (con `title` nativo como tooltip, mismo patrón sin librería de Tooltip documentado en
+  Bloque B.1) si no hay teléfono (alumno sin teléfono cargado, o plantilla sin alumno).
+  - **Bug real encontrado y arreglado en vivo**: la primera versión pasaba `whatsapp.buildMessage`
+    (una función que arma el mensaje con la URL del PDF, que recién se conoce después de generar) como
+    prop de un Server Component a este Client Component. Next.js lo rechaza en runtime: *"Functions
+    cannot be passed directly to Client Components unless you explicitly expose it by marking it with
+    'use server'"* — solo se pueden pasar Server Actions (funciones con su propia directiva `"use server"`),
+    nunca closures comunes. Fix: en vez de una función, el Server Component arma un
+    **`messagePrefix: string`** (el mensaje completo salvo la URL) y el cliente concatena
+    `messagePrefix + pdfUrl` recién cuando el PDF ya se generó. **Regla general para el resto del
+    proyecto**: nunca pasar una función común (no Server Action) de un Server Component a un Client
+    Component — armar el string/dato en el servidor y dejar que el cliente lo complete con lo que solo
+    él conoce (acá, la URL post-generación).
+  - Cada página (`[routineId]/page.tsx` y `[templateId]/page.tsx`) define el Server Action que llama
+    al generador **inline, con su propio `"use server"` dentro de una función local** (patrón soportado
+    por Next para pasar una acción ya "bindeada" a un id específico como prop a un Client Component,
+    sin tener que exponerle el id aparte al cliente).
+
+- **Probado end-to-end en el browser, en la cuenta de test (`testintruso@gmail.com`, gym "Setteria"
+  de prueba — NO la cuenta real)**:
+  - Logo: subida de un PNG de prueba (verificado con `Cambiar logo`/`Eliminar` apareciendo), eliminado
+    y confirmado el fallback de texto grande sin logo, vuelto a subir.
+  - Rutina real ("Rutina PDF Testing", alumno "QR Testing" con teléfono) con 2 días y 3 ejercicios
+    variados a propósito (uno con todos los datos, uno sin peso, uno solo con notas) → **se
+    descargó el PDF vía `curl` (headers confirmando `Content-Disposition: attachment` y
+    `content-type: application/pdf`) y se leyó su contenido**: logo, nombre del gym, alumno, título,
+    mes, fecha, ambos días, columnas correctas (todas presentes porque entre los 3 ejercicios cada
+    columna tiene al menos un valor), guiones en las celdas vacías.
+  - Plantilla real ("Plantilla PDF Testing", sin alumno) con 1 día y 1 ejercicio con solo
+    series/reps → PDF confirmado mostrando "Plantilla" en vez de nombre, sin línea de mes, columnas
+    Peso/Descanso/Notas correctamente **ausentes** (ningún ejercicio de esa plantilla las usa).
+  - WhatsApp: se inspeccionó el `href` real del botón (sin hacer click, para no depender de que
+    WhatsApp Web esté logueado en el entorno de test) y se confirmó el mensaje decodificado exacto:
+    `Hola QR Testing! Acá está tu rutina "Rutina PDF Testing": {url}`, con el número del alumno.
+  - La descarga real por click del navegador automatizado no se pudo confirmar en archivo (el
+    entorno de browser automation no deja rastro del archivo descargado en disco, posible sandboxing
+    de la extensión) — se validó igual bajando la URL real con `curl`, que es la fuente de verdad del
+    contenido servido.
+  - `tsc --noEmit` y `eslint` limpios en todo el módulo al final.
+
+- **Pendiente, no urgente**: mismo ítem que Bloque B de Semana 8 — `NEXT_PUBLIC_SITE_URL` en Vercel
+  (acá afecta la URL que queda embebida en el PDF/WhatsApp si `lib/qr-checkin.ts`'s `getSiteUrl()` se
+  reusara para esto; en la práctica esta feature no depende de esa variable porque la URL del PDF
+  siempre es la de Supabase Storage, no la de la app).
