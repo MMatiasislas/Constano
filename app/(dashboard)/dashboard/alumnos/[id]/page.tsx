@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentGymId } from "@/lib/auth/get-gym-id";
 import { cn } from "@/lib/utils";
 import {
   ESTADO_BADGE,
@@ -29,6 +30,7 @@ import { AsignarPlanDialog } from "@/components/planes/asignar-plan-dialog";
 import { CobrarRenovarDialog } from "@/components/pagos/cobrar-renovar-dialog";
 import { RegistrarPagoDialog } from "@/components/pagos/registrar-pago-dialog";
 import { HistorialPagos } from "@/components/pagos/historial-pagos";
+import { QrCheckinCard } from "@/components/alumnos/qr-checkin/qr-checkin-card";
 import type {
   AttendanceWithCheckedBy,
   Member,
@@ -58,6 +60,7 @@ type PageProps = {
 export default async function AlumnoDetallePage({ params }: PageProps) {
   const { id } = await params;
   const supabase = await createClient();
+  const gymId = await getCurrentGymId();
 
   const [
     { data: member },
@@ -66,6 +69,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
     { data: membershipData },
     { data: activePlansData },
     { data: paymentsData },
+    { data: gym },
   ] = await Promise.all([
     supabase.from("members").select("*").eq("id", id).single(),
     supabase
@@ -91,6 +95,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
       .select("*")
       .eq("member_id", id)
       .order("paid_at", { ascending: false }),
+    supabase.from("gyms").select("slug").eq("id", gymId).single(),
   ]);
 
   if (!member) {
@@ -102,6 +107,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
   const membership = (membershipData ?? null) as MembershipWithPlan | null;
   const planesActivos = (activePlansData ?? []) as Plan[];
   const pagos = (paymentsData ?? []) as Payment[];
+  const gymSlug = gym?.slug ?? "";
 
   const alumno = member as Member;
   const nombre = nombreCompleto(alumno.first_name, alumno.last_name);
@@ -168,6 +174,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
           <TabsTrigger value="rutinas">Rutinas</TabsTrigger>
           <TabsTrigger value="asistencia">Asistencia</TabsTrigger>
           <TabsTrigger value="pagos">Pagos</TabsTrigger>
+          <TabsTrigger value="qr">QR</TabsTrigger>
         </TabsList>
         <TabsContent value="info">
           <Card>
@@ -203,6 +210,15 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
         </TabsContent>
         <TabsContent value="pagos">
           <PagosTabContent memberId={alumno.id} membership={membership} pagos={pagos} />
+        </TabsContent>
+        <TabsContent value="qr">
+          <QrCheckinCard
+            memberId={alumno.id}
+            memberName={nombre}
+            memberPhone={alumno.phone}
+            initialToken={alumno.qr_token}
+            gymSlug={gymSlug}
+          />
         </TabsContent>
       </Tabs>
     </div>

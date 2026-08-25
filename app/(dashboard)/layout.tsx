@@ -54,7 +54,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex flex-1">
-      <aside className="hidden w-56 shrink-0 border-r border-border md:flex md:flex-col">
+      <aside className="hidden w-56 shrink-0 border-r border-border md:flex md:flex-col print:hidden">
         <div className="flex h-14 items-center border-b border-border px-4">
           <span className="text-base font-semibold tracking-tight">Constano</span>
         </div>
@@ -64,11 +64,11 @@ export default async function DashboardLayout({
         />
       </aside>
       <div className="flex flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b border-border px-4">
+        <header className="flex h-14 items-center justify-between border-b border-border px-4 print:hidden">
           <span className="text-sm font-medium text-muted-foreground">{gymName}</span>
           <UserMenu fullName={fullName} email={user.email ?? ""} />
         </header>
-        <main className="flex-1 bg-muted/20 p-6">{children}</main>
+        <main className="flex-1 bg-muted/20 p-6 print:bg-white print:p-0">{children}</main>
       </div>
     </div>
   );

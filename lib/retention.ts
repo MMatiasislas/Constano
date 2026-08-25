@@ -102,9 +102,13 @@ export function resolutionReasonLabel(reason: string | null) {
 // --- Mensaje de WhatsApp configurable (Bloque C) ---
 
 // `gyms.settings` es jsonb de propósito general (da lugar a sumar más config
-// a futuro sin migraciones nuevas) — este es el único campo que usa hoy.
+// a futuro sin migraciones nuevas). `kiosk_pin` se sumó en Semana 8 Bloque B
+// (PIN de 4 dígitos para salir del modo kiosco de check-in por QR, ver
+// lib/qr-checkin.ts) — sigue viviendo acá porque este es el único lugar del
+// proyecto que ya representa la forma completa de `gyms.settings`.
 export type GymSettings = {
   retention_message?: string | null;
+  kiosk_pin?: string | null;
 };
 
 export const DEFAULT_WHATSAPP_TEMPLATE =

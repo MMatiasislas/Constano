@@ -133,6 +133,7 @@ export type Member = {
   status: MemberStatus;
   notes: string | null;
   created_at: string;
+  qr_token: string | null;
 };
 
 export type Attendance = {

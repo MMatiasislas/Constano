@@ -577,4 +577,134 @@ El parseo del archivo es 100% client-side; el insert final pasa por Server Actio
     confirmarlo. Los 8 alumnos ficticios creados por la importación (Juan Pérez, María García,
     Carlos Rodríguez, Ana Martínez, Lucía Fernández, Diego Sánchez, Sofía Torres, Pablo Ramírez)
     se dieron de baja uno por uno al terminar, mismo criterio que "Foto Testing"/"Alerta Testing"
+
+## Semana 8, Bloque B: check-in por QR (completo, probado end-to-end)
+Cada alumno puede tener un QR único para marcar su propia entrada sin pasar por el mostrador.
+Es, con diferencia, **la parte más sensible en seguridad de todo el proyecto**: expone rutas
+públicas (`/checkin/...`, sin login) con capacidad de escritura real en la base (insertar
+asistencias). Toda esa superficie se resolvió con 4 funciones Postgres `SECURITY DEFINER` — no
+hay ninguna policy de RLS nueva para `anon`, a propósito.
+
+- **Modelo**: `members.qr_token` (migración `006_member_qr_token.sql`, columna `varchar unique`
+  + índice parcial). El QR codifica
+  `{siteUrl}/checkin/{gymSlug}/scan?token={qr_token}` (`buildCheckinScanUrl` en
+  `lib/qr-checkin.ts`). `getSiteUrl()` usa `NEXT_PUBLIC_SITE_URL` si está seteada, si no
+  `VERCEL_URL`, si no `http://localhost:3000` — **falta configurar `NEXT_PUBLIC_SITE_URL` en
+  Vercel** para que los QR impresos apunten al dominio real en producción; mientras tanto usan lo
+  que Vercel resuelva automáticamente.
+- **`generateQrToken()` vive en `alumnos/[id]/actions.ts`, no en `lib/qr-checkin.ts`** — usa
+  `randomUUID`/`randomBytes` de Node (`crypto`), y `lib/qr-checkin.ts` lo importan también
+  Client Components (la card de QR de la ficha del alumno, para armar la URL a codificar y el
+  link de WhatsApp) — meter un import de `crypto` ahí rompería ese bundle de cliente. Token final:
+  UUID v4 sin guiones + 8 bytes extra en hex (48 caracteres), no adivinable.
+- **4 funciones Postgres `SECURITY DEFINER`** en `007_qr_checkin_functions.sql`, cada una
+  devolviendo el mínimo indispensable (nunca la fila completa, nunca `settings` crudo con el
+  PIN adentro), con `search_path = public` fijo (mismo patrón que `current_gym_id()` de
+  Semana 1, evita el shadowing de esquema clásico sobre funciones `SECURITY DEFINER`) y
+  `grant execute` explícito a `anon`+`authenticated` después de revocar de `public`:
+  1. `get_gym_public_info(slug)` → `{id, name, has_kiosk_pin}` — nombre del gym para los headers
+     públicos + si ya tiene PIN configurado (booleano, nunca el valor).
+  2. `get_member_qr_info(slug, token)` → `{first_name, last_name}` — nombre del alumno para la
+     página "Mi QR", validando que el token pertenezca a ESE gym.
+  3. `verify_kiosk_pin(slug, pin)` → boolean — el PIN real nunca sale de la función.
+  4. `checkin_by_qr_token(slug, token)` → jsonb `{status, member_name?, checked_in_at?}` — el
+     check-in en sí: busca el member por token+slug combinados (nunca por separado, para no
+     filtrar si un token existe en OTRO gym), exige `status = 'active'` (un alumno pausado/dado
+     de baja no puede seguir marcando con un QR viejo), intenta el insert, y si salta
+     `unique_violation` (el índice único de asistencia por día de Semana 4) devuelve
+     `already_checked_in` con la hora ya registrada en vez de fallar — el más reciente registro
+     de ese alumno es siempre el de hoy si el insert chocó, así que no hace falta reimplementar
+     la lógica de límites de día acá.
+  - **3 de estas 4 funciones son extra respecto a lo que pedía la tarea original** (que solo
+    pedía `checkin_by_qr_token`) — hicieron falta porque las policies de RLS de `gyms`/`members`
+    son `to authenticated` únicamente (Semana 1): sin ellas, ni siquiera un `select name from
+    gyms` funciona para un visitante anónimo. Se explicó y se documentó la razón en el momento.
+  - **Gotcha grave de esta sesión, no un bug de código**: el cache de esquema de PostgREST quedó
+    desincronizado durante horas — `get_gym_public_info` sí se refrescó con un reload manual,
+    pero `get_member_qr_info`/`verify_kiosk_pin`/`checkin_by_qr_token` seguían devolviendo
+    `PGRST202` (función no encontrada) incluso después de reload de cache Y un restart completo
+    del proyecto. La causa real, encontrada recién al pedir el resultado *textual* de
+    `pg_get_function_arguments(oid)` (no solo "¿existe sí/no?"): **la traducción automática del
+    navegador de Matías estaba activa en la interfaz donde leía el SQL, y tradujo `as $$` a
+    `como $$`** al copiarlo — un error de sintaxis que las 2 primeras funciones (más cortas,
+    quizás con menos ocurrencias de "as" en una posición que la traducción tocara) esquivaron por
+    suerte, pero las otras 3 no. **Lección para cualquier sesión futura que le pida a Matías
+    correr SQL a mano**: si una función "no existe" en el cache pese a reloads/restart, no asumir
+    que es solo un tema de cache — pedir el resultado *literal* de una verificación en
+    `pg_proc` (no un sí/no) y, si el usuario reporta que corrió el SQL "sin error" pero el
+    `CREATE OR REPLACE` nunca tomó efecto, sospechar traducción automática del navegador
+    corrompiendo palabras clave del SQL al copiar/pegar.
+  - **Idempotencia por `checked_in_at::date` reusando el mecanismo de Bloque A de Semana 4**: no
+    se reimplementó ninguna lógica de "es hoy" en la función — el índice único ya existente hace
+    todo el trabajo, la función solo reacciona a la excepción.
+- **Ficha del alumno**: nueva pestaña "QR" (`components/alumnos/qr-checkin/qr-checkin-card.tsx`).
+  Estado vacío → "Generar código QR"; con token → imagen del QR (`components/checkin/qr-code-image.tsx`,
+  genera el `data:` URL client-side con la lib `qrcode`, sin pasar por el servidor) + 3 acciones:
+  - **Ver/Imprimir**: `alumnos/[id]/imprimir-qr/page.tsx` (autenticada, dentro de `(dashboard)`).
+    Se agregaron clases `print:hidden` al `<aside>`/`<header>` del layout del dashboard
+    (`app/(dashboard)/layout.tsx`) para que `window.print()` solo imprima la tarjeta del QR, no
+    el sidebar — **regla `print:` global nueva, aplica a cualquier página futura del dashboard
+    que quiera una vista imprimible**, no hace falta repetirla por página.
+  - **Enviar por WhatsApp**: usa `whatsappHref` de `lib/members.ts` (mismo helper que el resto
+    del proyecto) apuntando al teléfono del alumno si lo tiene cargado, con el mensaje pidiendo
+    que linkea a la página "Mi QR" (`buildMiQrUrl`), no a la URL cruda del QR.
+  - **Regenerar QR**: mismo `generateMemberQrToken()` que "Generar" la primera vez (solo pisa el
+    token), con `AlertDialog` de confirmación.
+- **`/checkin/{gymSlug}/mi-qr/{token}`**: página pública, mobile-first, `notFound()` si el gym o
+  el token no matchean. Botón "Descargar imagen" con `<a download>` sobre el mismo `data:` URL
+  del QR (funciona normal en el navegador real de un usuario — la restricción de descargas
+  bloqueadas es específica del sandbox de Artifacts, no aplica acá).
+- **`/checkin/{gymSlug}/scan`**: página pública a la que llega alguien que escanea el QR con la
+  cámara de SU PROPIO celular (no el kiosco) — resuelve el check-in server-side en la carga de
+  la página (llama a `scanQrCheckin` directo, sin pasar por fetch) y muestra
+  `components/checkin/checkin-result-view.tsx` (mismo componente que usa el kiosco).
+- **`/checkin/{gymSlug}` (kiosco)**: `components/checkin/kiosk-scanner.tsx`, Client Component con
+  `html5-qrcode` (import dinámico dentro de un `useEffect`, mismo patrón que
+  `browser-image-compression` en `photo-upload.tsx` — nunca top-level, evita tocar `document` en
+  SSR). Usa la clase `Html5Qrcode` de bajo nivel (no el widget `Html5QrcodeScanner` con su propia
+  UI) para poder controlar el diseño grande/simple pedido. Al decodificar un QR: extrae el
+  `token` de la URL con `new URL(decodedText).searchParams`, pausa la cámara
+  (`instance.pause(true)`), llama a `scanQrCheckin`, muestra el resultado 4 segundos
+  (`setTimeout`) y llama a `instance.resume()` — nunca se hace stop/start completo entre
+  escaneos, solo pausa/resume (mucho más rápido).
+  - **Primera vez que un staff de ESE gym entra sin PIN configurado**: `KioskScanner` recibe
+    `isStaffOfThisGym`/`hasKioskPin` como props (resueltos en el Server Component de
+    `app/checkin/[gymSlug]/page.tsx`, comparando `users.gym_id` del usuario logueado —si hay—
+    contra el `id` del gym resuelto por slug) y muestra
+    `components/checkin/configurar-pin-primera-vez.tsx` en vez de la cámara hasta que se guarde
+    un PIN — reusa el mismo `setKioskPin()` autenticado de Configuración (no hace falta una
+    acción pública para ESCRIBIR el PIN, solo para leerlo/verificarlo).
+  - **Botón "Salir"** (`components/checkin/salir-kiosco-dialog.tsx`): pide el PIN, llama a
+    `verifyKioskPinAction` (pública), y si es válido redirige a `/dashboard/asistencia` (si había
+    sesión activa en ese dispositivo) o `/login` (si no) — la decisión de a dónde mandar se
+    resuelve server-side (prop `hasActiveSession`), el cliente nunca decide solo con el PIN.
+  - **Sin rate limiting en el PIN a propósito**: el espacio de 10.000 combinaciones no está
+    protegido — acertar el PIN solo permite salir de la pantalla de escaneo en ESE dispositivo
+    físico, nunca da acceso a datos sin además un login real de staff. Threat model aceptado
+    para MVP, documentado en el propio SQL de la función.
+- **`app/(dashboard)/dashboard/configuracion/kiosco/`**: página de config del PIN
+  (`components/configuracion/kiosco-pin-form.tsx`) + botón "Abrir modo kiosco (QR)" (`target=
+  _blank` a `/checkin/{slug}`). El mismo botón se agregó también en el header de
+  `/dashboard/asistencia` (pedido explícito de la tarea, para que el encargado lo abra fácil en
+  la tablet). Sidebar: "Kiosco" sumado como 4º sub-item de Configuración.
+- **Bug real preexistente encontrado y arreglado en el camino, no relacionado a esta feature**:
+  `components/dashboard/user-menu.tsx` rompía al abrir el menú de usuario
+  (`Base UI: MenuGroupContext is missing` — `DropdownMenuLabel` estaba fuera de un
+  `DropdownMenuGroup`). Bloqueaba directamente poder cerrar sesión para probar con otra cuenta,
+  así que se arregló envolviendo `DropdownMenuLabel` + `DropdownMenuSeparator` + el item de
+  "Cerrar sesión" en un `<DropdownMenuGroup>`. No se investigó desde cuándo estaba roto.
+- **Probado end-to-end en el browser en una cuenta de prueba nueva** (gym "Setteria" — mismo
+  nombre que la cuenta real por decisión de Matías al crearla, pero `gym_id` distinto, 0 alumnos
+  al arrancar): alumno de prueba "QR Testing" → generar QR → página "Mi QR" se ve bien en un
+  viewport angosto → configurar PIN `1234` → escanear pegando el token en `/scan` (cámara real no
+  es práctica de testear en este entorno) → "¡Bienvenido QR Testing! 💪 Entrada registrada a las
+  17:12" → reintentar el mismo token → "Ya registraste tu entrada hoy a las 17:12 · ¡Nos vemos
+  adentro!" → token inventado → "QR no reconocido" → modo kiosco: "Salir" con PIN incorrecto
+  (rechazado) y correcto (redirigió a `/dashboard/asistencia`, había sesión activa) → confirmado
+  ahí que "QR Testing" aparece "Presente 17:12", exactamente igual que un check-in manual. Sin
+  errores de consola. Alumno de prueba dado de baja al terminar.
+- **Pendiente real, no resuelto en esta sesión**: configurar `NEXT_PUBLIC_SITE_URL` en las
+  variables de entorno de Vercel apuntando al dominio real de producción — sin eso, los QR
+  impresos/enviados en producción codifican lo que Vercel resuelva automáticamente vía
+  `VERCEL_URL`, que puede no ser el dominio final que los alumnos vean.
     en sesiones anteriores.

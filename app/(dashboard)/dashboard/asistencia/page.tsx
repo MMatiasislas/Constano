@@ -1,8 +1,11 @@
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { QrCodeIcon } from "lucide-react";
 
+import { getCurrentGymId } from "@/lib/auth/get-gym-id";
 import { createClient } from "@/lib/supabase/server";
 import { getEndOfDayISO, getStartOfDayISO } from "@/lib/attendance";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AsistenciaFiltros } from "@/components/asistencia/asistencia-filtros";
 import { AsistenciaLista } from "@/components/asistencia/asistencia-lista";
@@ -44,18 +47,23 @@ export default async function AsistenciaPage({ searchParams }: PageProps) {
     );
   }
 
-  const [{ data }, { count: totalCount }, { count: presentesHoyCount }] = await Promise.all([
-    query,
-    supabase.from("members").select("*", { count: "exact", head: true }).in("status", estados),
-    supabase
-      .from("attendances")
-      .select("member_id, members!inner(status)", { count: "exact", head: true })
-      .gte("checked_in_at", getStartOfDayISO())
-      .lt("checked_in_at", getEndOfDayISO())
-      .in("members.status", estados),
-  ]);
+  const gymId = await getCurrentGymId();
+
+  const [{ data }, { count: totalCount }, { count: presentesHoyCount }, { data: gym }] =
+    await Promise.all([
+      query,
+      supabase.from("members").select("*", { count: "exact", head: true }).in("status", estados),
+      supabase
+        .from("attendances")
+        .select("member_id, members!inner(status)", { count: "exact", head: true })
+        .gte("checked_in_at", getStartOfDayISO())
+        .lt("checked_in_at", getEndOfDayISO())
+        .in("members.status", estados),
+      supabase.from("gyms").select("slug").eq("id", gymId).single(),
+    ]);
   const members = (data ?? []) as MemberWithTodayAttendance[];
   const presentesHoy = presentesHoyCount ?? 0;
+  const gymSlug = gym?.slug ?? "";
 
   const fechaLarga = capitalizar(
     format(new Date(), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })
@@ -68,13 +76,25 @@ export default async function AsistenciaPage({ searchParams }: PageProps) {
           <h1 className="text-2xl font-semibold tracking-tight">Asistencia</h1>
           <p className="text-muted-foreground">{fechaLarga}</p>
         </div>
-        <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
-          <span className="text-2xl font-semibold text-emerald-700 dark:text-emerald-400">
-            {presentesHoy}
-          </span>
-          <span className="text-sm text-emerald-700 dark:text-emerald-400">
-            {presentesHoy === 1 ? "presente hoy" : "presentes hoy"}
-          </span>
+        <div className="flex items-center gap-3">
+          {gymSlug && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<a href={`/checkin/${gymSlug}`} target="_blank" rel="noopener noreferrer" />}
+            >
+              <QrCodeIcon />
+              Abrir modo kiosco (QR)
+            </Button>
+          )}
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
+            <span className="text-2xl font-semibold text-emerald-700 dark:text-emerald-400">
+              {presentesHoy}
+            </span>
+            <span className="text-sm text-emerald-700 dark:text-emerald-400">
+              {presentesHoy === 1 ? "presente hoy" : "presentes hoy"}
+            </span>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { randomBytes, randomUUID } from "crypto";
 import { format } from "date-fns";
 
 import { getCurrentGymId } from "@/lib/auth/get-gym-id";
@@ -264,6 +265,45 @@ export async function registerPaymentOnly(memberId: string, values: PaymentFormV
     revalidatePath(`/dashboard/alumnos/${memberId}`);
     revalidatePath("/dashboard/pagos");
     return { success: true as const };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "No hay una sesión activa. Iniciá sesión de nuevo.",
+    };
+  }
+}
+
+// 48 caracteres hex (un UUID v4 + 8 bytes extra de random), no adivinable.
+// Vive acá (no en lib/qr-checkin.ts) porque usa el módulo `crypto` de Node
+// — meterlo en un archivo que también importan Client Components rompería
+// el bundle de cliente.
+function generateQrToken() {
+  return `${randomUUID().replace(/-/g, "")}${randomBytes(8).toString("hex")}`;
+}
+
+// Misma acción para "Generar QR" (primera vez) y "Regenerar QR": ambas
+// simplemente pisan `qr_token` con uno nuevo. El QR anterior queda inválido
+// solo porque ya no matchea ninguna fila (el índice único garantiza que
+// nunca hay dos alumnos con el mismo token).
+export async function generateMemberQrToken(
+  memberId: string
+): Promise<{ error: string } | { success: true; token: string }> {
+  try {
+    const gymId = await getCurrentGymId();
+    const supabase = await createClient();
+    const token = generateQrToken();
+
+    const { error } = await supabase
+      .from("members")
+      .update({ qr_token: token })
+      .eq("id", memberId)
+      .eq("gym_id", gymId);
+
+    if (error) {
+      return { error: "No pudimos generar el código QR. Intentá de nuevo." };
+    }
+
+    revalidatePath(`/dashboard/alumnos/${memberId}`);
+    return { success: true as const, token };
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "No hay una sesión activa. Iniciá sesión de nuevo.",
