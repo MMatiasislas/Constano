@@ -11,13 +11,13 @@ function HeroMock() {
     <div className="relative mx-auto w-full max-w-sm rounded-2xl border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/40 backdrop-blur">
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-white/80">Asistencia semanal</span>
-        <TrendingUp className="size-4 text-orange-400" />
+        <TrendingUp className="size-4 text-brand-400" />
       </div>
       <div className="mt-4 flex h-24 items-end gap-2">
         {BAR_HEIGHTS.map((h, i) => (
           <div
             key={i}
-            className="flex-1 rounded-t-sm bg-orange-400"
+            className="flex-1 rounded-t-sm bg-brand-400"
             style={{ height: `${h}%`, opacity: 0.45 + (h / 100) * 0.55 }}
           />
         ))}
@@ -41,17 +41,17 @@ export function HeroSection() {
     <section className="relative overflow-hidden bg-neutral-950 text-white">
       <div
         aria-hidden
-        className="pointer-events-none absolute -top-40 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-orange-500/25 blur-[120px]"
+        className="pointer-events-none absolute -top-40 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-brand-500/25 blur-[120px]"
       />
       <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-24 sm:px-6 md:grid-cols-2 md:items-center md:py-32">
         <RevealOnScroll>
           <div className="flex flex-col gap-6">
-            <span className="w-fit rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-orange-300">
+            <span className="w-fit rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-brand-400">
               Software para gimnasios
             </span>
             <h1 className="text-4xl font-bold tracking-tight text-balance sm:text-5xl md:text-6xl">
               Más que un sistema de gestión: un sistema que{" "}
-              <span className="text-orange-400">retiene</span>
+              <span className="text-brand-400">retiene</span>
             </h1>
             <p className="max-w-lg text-lg text-white/70">
               Rutinas, asistencia y alertas de retención en un solo lugar.
@@ -61,7 +61,7 @@ export function HeroSection() {
                 size="lg"
                 nativeButton={false}
                 render={<Link href="/signup" />}
-                className="h-12 bg-orange-500 px-6 text-base text-white hover:bg-orange-600"
+                className="h-12 bg-brand-500 px-6 text-base text-white hover:bg-brand-600"
               >
                 Empezá gratis 7 días
                 <ArrowRight />

@@ -6,7 +6,7 @@ import { RevealOnScroll } from "./reveal-on-scroll";
 
 export function FinalCtaSection() {
   return (
-    <section className="bg-orange-500 px-4 py-20 text-center sm:px-6 sm:py-24">
+    <section className="bg-brand-500 px-4 py-20 text-center sm:px-6 sm:py-24">
       <RevealOnScroll className="mx-auto flex max-w-2xl flex-col items-center gap-6">
         <h2 className="text-3xl font-bold tracking-tight text-white text-balance sm:text-4xl">
           Empezá a retener alumnos hoy

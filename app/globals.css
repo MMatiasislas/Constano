@@ -5,6 +5,14 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Acento de marca de la landing pública (verde esmeralda) — NO tocar el
+     dashboard interno, que sigue con la paleta neutra de --primary/--accent
+     de shadcn. Shades numeradas al estilo Tailwind (200 = más claro) para
+     poder usar bg-brand-500, text-brand-400, hover:bg-brand-600, etc. */
+  --color-brand-200: #9fe1cb;
+  --color-brand-400: #5dcaa5;
+  --color-brand-500: #1d9e75;
+  --color-brand-600: #0f6e56;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);

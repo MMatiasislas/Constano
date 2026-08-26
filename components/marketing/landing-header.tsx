@@ -22,7 +22,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
     <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <span className="flex size-7 items-center justify-center rounded-md bg-orange-500 text-white">
+          <span className="flex size-7 items-center justify-center rounded-md bg-brand-500 text-white">
             <Dumbbell className="size-4" />
           </span>
           Constano
@@ -47,7 +47,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
           <Button
             nativeButton={false}
             render={<Link href="/signup" />}
-            className="bg-orange-500 text-white hover:bg-orange-600"
+            className="bg-brand-500 text-white hover:bg-brand-600"
           >
             Empezar gratis
           </Button>
@@ -88,7 +88,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
               <Button
                 nativeButton={false}
                 render={<Link href="/signup" onClick={() => setOpen(false)} />}
-                className="bg-orange-500 text-white hover:bg-orange-600"
+                className="bg-brand-500 text-white hover:bg-brand-600"
               >
                 Empezar gratis
               </Button>

@@ -34,12 +34,12 @@ export function PricingSection() {
                 className={cn(
                   "relative flex h-full flex-col gap-5 rounded-2xl border bg-card p-6",
                   plan.highlighted
-                    ? "border-orange-500 shadow-lg shadow-orange-500/10"
+                    ? "border-brand-500 shadow-lg shadow-brand-500/10"
                     : "border-border"
                 )}
               >
                 {plan.highlighted && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-orange-500 px-3 py-1 text-xs font-semibold whitespace-nowrap text-white">
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-3 py-1 text-xs font-semibold whitespace-nowrap text-white">
                     Más elegido
                   </span>
                 )}
@@ -55,7 +55,7 @@ export function PricingSection() {
                   nativeButton={false}
                   render={<Link href="/signup" />}
                   variant={plan.highlighted ? "default" : "outline"}
-                  className={cn("mt-auto", plan.highlighted && "bg-orange-500 text-white hover:bg-orange-600")}
+                  className={cn("mt-auto", plan.highlighted && "bg-brand-500 text-white hover:bg-brand-600")}
                 >
                   Empezar gratis
                 </Button>
