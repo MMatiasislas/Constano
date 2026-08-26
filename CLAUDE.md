@@ -894,3 +894,174 @@ no alcanza con mirar que el hash cambió.
   `href` real. `tsc --noEmit` y `eslint` limpios.
 - **Pendiente para Matías**: reemplazar `WHATSAPP_PLACEHOLDER_NUMBER` en `lib/marketing.ts` por el
   número real de WhatsApp antes de producción (2 usos: card "Custom" de precios y footer).
+
+## Semana 10, Bloque B — Parte 1: modelo de suscripciones + pantalla de planes + checkout
+(Mercado Pago y Stripe). **NO incluye webhooks ni bloqueo real de gyms suspendidos — eso es la
+Parte 2.** Esto es la suscripción del GYM a Constano (lo que el gym nos paga a nosotros); no
+confundir con `plans`/`memberships` (Semana 6), que es la cuota que el gym le cobra a SUS alumnos.
+
+### Modelo de datos
+- Migración `supabase/migrations/011_subscriptions.sql` (el número 010 ya estaba usado por
+  `onboarding_seen_at`) — **sin correr todavía**, Matías la corre a mano en el SQL Editor:
+  - `subscription_plans`: catálogo fijo (`basic`/`pro`/`max`), precio, `max_members`, `features`
+    (jsonb array de strings). Es la ÚNICA fuente de verdad del precio — ni la pantalla de planes
+    ni los checkouts de MP/Stripe hardcodean un precio, todos leen esta tabla en el momento.
+  - `gym_subscriptions`: historial de suscripciones por gym (`provider`, `provider_subscription_id`,
+    `status`, `current_period_start/end`). RLS: los gyms solo pueden `select` la propia (`gym_id =
+    current_gym_id()`); a propósito NO hay policy de insert/update para `authenticated` — eso lo
+    va a hacer el webhook de la Parte 2 con la service role key, nunca el cliente.
+  - `gyms.grace_period_ends_at` (nuevo, nullable) y `gyms.current_plan_id` (nuevo, FK a
+    `subscription_plans`).
+- `types/db.ts`: `Gym`, `SubscriptionPlan`, `SubscriptionPlanId`, `GymSubscriptionRecord`,
+  `PaymentProvider`/`PAYMENT_PROVIDERS`. **No se llama `Plan` a propósito** — ese nombre ya lo usa
+  el tipo de los planes del GYM a sus alumnos (Semana 6); acá es `SubscriptionPlan`.
+
+### Estados de suscripción (`lib/subscription.ts`)
+- `getSubscriptionStatus(gym, activeSubscription, now?)`: función PURA (no pega a la DB) que
+  calcula el estado real — `trial` → `grace_period` → `active` → `suspended`, en ese orden de
+  prioridad, siempre a partir de fechas + si hay una `gym_subscriptions` con `status='active'`
+  vigente, **nunca confiando en `gyms.subscription_status` a secas** (esa columna la va a
+  mantener el webhook de la Parte 2 y puede quedar desactualizada). El caller (la página) hace las
+  queries y le pasa los datos ya resueltos — mismo patrón que `getMembershipStatus`/
+  `getSubscriptionStatus` de otros módulos del proyecto.
+  - `grace_period_ends_at` se calcula on-the-fly como `trial_ends_at + 3 días` si la columna
+    todavía está en `null` (no hay ningún proceso en la Parte 1 que la setee a mano) — así el
+    estado "grace_period" funciona igual sin depender de un cron.
+- `isGymBlocked(statusInfo)`: `true` solo si `status === "suspended"`. **Todavía no está cableado
+  en ningún lado** (ni middleware, ni Server Actions) — es la regla ya lista para que la Parte 2 la
+  conecte, a propósito no bloquea nada todavía (pedido explícito de la tarea).
+- `formatPriceARS`: re-exporta `formatCurrency` de `lib/payments.ts` (mismo formato "$30.000") en
+  vez de duplicar la lógica — un solo lugar de verdad para el formato de plata en todo el proyecto.
+
+### Pantalla `/dashboard/configuracion/suscripcion`
+Server Component (`page.tsx`) que trae en paralelo: el gym, los `subscription_plans` activos, y la
+`gym_subscriptions` activa y vigente (si hay). Sidebar: "Suscripción" agregado como 6º sub-item de
+Configuración.
+- `components/suscripcion/estado-suscripcion-card.tsx`: 4 variantes de card según el estado
+  (trial con Badge de días, grace_period en ámbar, active en verde con fecha de próximo cobro,
+  suspended en rojo/destructive).
+- `components/suscripcion/plan-card.tsx`: una card por plan (Basic/Pro/Max), con
+  `ElegirPlanDialog` como CTA salvo que sea el plan actual (entonces muestra Badge "Plan actual" +
+  botón disabled). **El plan "actual" se determina desde `statusInfo` recién calculado, no desde
+  `gym.current_plan_id` directo** — mismo criterio de "no confiar en la columna", coherente con
+  `getSubscriptionStatus`.
+- Card chica de "¿Más de 200 alumnos?" con el mismo `WHATSAPP_PLACEHOLDER_NUMBER`/`whatsappHref`
+  que ya usa la landing pública (`lib/marketing.ts`/`lib/members.ts`), reusados tal cual.
+- **A propósito NO se tocó ningún color de marca de la landing (`brand-*`)** acá — el dashboard
+  sigue con los tokens neutros `--primary`/`--accent` de shadcn, como pide la tarea explícitamente.
+
+### Checkout — Mercado Pago (`lib/payments/mercadopago.ts`)
+SDK oficial `mercadopago` (v3, paquete `MercadoPagoConfig` + clase `PreApproval`).
+`createSubscriptionCheckout(gymId, planId, payerEmail)` crea una **preapproval** (suscripción
+recurrente, no un pago suelto) con `auto_recurring` mensual y devuelve `init_point` (la URL de
+checkout de MP). El precio se lee de `subscription_plans` DENTRO de la función (nunca se recibe
+como parámetro) para que no haya forma de mandar un precio distinto al configurado.
+`external_reference` queda como `"{gymId}:{planId}"` — string simple que el webhook de la Parte 2
+va a parsear con `split(":")`.
+
+### Checkout — Stripe (`lib/payments/stripe.ts`)
+SDK oficial `stripe` (v22). `createStripeCheckoutSession(gymId, planId, payerEmail)` crea una
+Checkout Session en modo `subscription` y devuelve su `url`.
+- **Decisión que se aparta de lo que sugería la tarea**: en vez de crear Price IDs a mano en el
+  dashboard de Stripe (`STRIPE_PRICE_BASIC`/`PRO`/`MAX`), el precio se arma inline con
+  `price_data` en cada checkout, leído en el momento de `subscription_plans` — mismo motivo que
+  MP, un solo lugar de verdad para el precio, sin tener que ir a sincronizar nada en el dashboard
+  de Stripe cada vez que cambia un precio. No hace falta crear esos Price IDs.
+- `unit_amount` se manda en centavos (`price_ars * 100`) — ARS no es una moneda "zero-decimal"
+  para Stripe.
+- `client_reference_id`/`metadata` llevan `gymId`/`planId` (mismo criterio que `external_reference`
+  de MP) para que el webhook de la Parte 2 pueda identificar el gym.
+- **Verificado en vivo con claves de test reales**: Stripe SÍ acepta `currency: "ars"` — el
+  checkout cargó bien mostrando "ARS 50,000.00 por mes". El riesgo que había quedado sin confirmar
+  acá ya no aplica (ver sección de pruebas end-to-end más abajo).
+
+### Server Action y páginas de retorno
+- `app/(dashboard)/dashboard/configuracion/suscripcion/actions.ts`: `startCheckout(planId,
+  provider)` — resuelve el email del usuario logueado (requerido por ambos SDKs), llama al lib
+  correspondiente, y hace `redirect(checkoutUrl)`. **El `redirect()` está a propósito FUERA del
+  `try/catch`** que envuelve la llamada a MP/Stripe — `redirect()` tira una excepción especial
+  (`NEXT_REDIRECT`) que Next.js necesita que se propague sin que nada la atrape, si quedara adentro
+  del catch se comería el redirect y tiraría el mensaje de error genérico en su lugar.
+- `components/suscripcion/elegir-plan-dialog.tsx` (client): Dialog con 2 botones (Mercado
+  Pago/Stripe, con ícono + texto, sin logos de imagen reales — no hay assets de marca en el
+  proyecto, se usó `Wallet`/`CreditCard` de lucide-react con un color de acento por marca en vez
+  de bajar logos externos). Llama a `startCheckout` directo (no via `<form action>`) — si
+  funciona, el usuario nunca vuelve a este componente (ya está afuera de la app); si falla, el
+  `return {error}` del Server Action sí vuelve y se muestra con `toast.error`.
+- `.../exito/page.tsx` y `.../cancelado/page.tsx`: páginas de retorno de MP/Stripe. La de éxito
+  aclara explícitamente que la activación real la hace el webhook (Parte 2) y puede tardar — esta
+  página NO activa nada por sí sola.
+
+### Variables de entorno necesarias
+```
+MERCADOPAGO_ACCESS_TOKEN=TEST-...
+NEXT_PUBLIC_MERCADOPAGO_PUBLIC_KEY=TEST-...   # no se usa todavía en Parte 1 (no hay Payment Brick/checkout embebido), pero conviene tenerla ya
+STRIPE_SECRET_KEY=sk_test_...
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_... # tampoco se usa todavía en Parte 1 (checkout es 100% redirect a Stripe, no Stripe.js embebido)
+```
+**Gotcha real de esta sesión, no solo de código**: el `.env.local` no tenía estas variables en
+formato válido (`CLAVE=valor`) — eran valores sueltos pegados con una etiqueta entre paréntesis al
+lado (`(PUBLIC KEY MP)`, `(STRIPE)`), que `dotenv` simplemente ignora sin avisar. Se reformatearon
+las credenciales de Mercado Pago (son `TEST-...` reales, se usan tal cual). **Las de Stripe
+quedaron con `STRIPE_SECRET_KEY` vacío a propósito** — la única credencial de Stripe que había
+pegada era la publishable key, y encima es `pk_live_...` (**clave de PRODUCCIÓN real, no de
+test**), sin ninguna secret key al lado. Se dejó comentado en el propio `.env.local` qué hace
+falta reemplazar antes de poder probar Stripe: la publishable por la de test (`pk_test_...`) y
+pegar la secret de test (`sk_test_...`). **Sin `STRIPE_SECRET_KEY` configurada, elegir Stripe en
+el dialog tira un error controlado** ("Falta configurar STRIPE_SECRET_KEY...") en vez de romper en
+silencio — confirmado que ese es justamente el comportamiento esperado hasta que se complete la
+clave.
+
+### Probado end-to-end (completo, en 3 sesiones seguidas por los gotchas de abajo)
+Cuenta de prueba `suscripcion.test.constano.20260826b@example.com` (gym "Suscripcion Test Gym" —
+no la cuenta real). Confirmado en el browser: banner "Estás en período de prueba" con "14 días
+restantes", las 3 cards (Basic/Pro/Max) con precio/features reales de `subscription_plans`, y
+"Elegir plan" → Pro → **ambos** proveedores redirigiendo a checkouts reales:
+- **Mercado Pago**: `mercadopago.com.ar/checkout/...`, mostrando "Constano — Plan Pro · $50.000".
+- **Stripe**: `checkout.stripe.com/...` con badge "Entorno de prueba" (sesión `cs_test_...`),
+  "Suscríbete a Constano — Plan Pro · ARS 50,000.00 por mes". **Confirma que Stripe SÍ acepta
+  `currency: "ars"`** — el riesgo que había quedado sin verificar arriba ya no aplica.
+En ningún caso se completó el pago (no se ingresó ninguna tarjeta) — solo se confirmó que la URL
+se genera y carga la pantalla real del proveedor.
+
+**3 gotchas reales encontrados en el camino, no bugs del código en sí:**
+1. `subscription_plans` quedó vacía la primera vez que Matías corrió la migración — el `insert`
+   no llegó a ejecutarse (se volvió a pasar aparte y con eso se resolvió). Si en algún momento
+   `/dashboard/configuracion/suscripcion` no muestra las 3 cards pese a no tirar error, sospechar
+   esto primero: `select count(*) from subscription_plans;`.
+2. **Gotcha más serio, con RLS**: aun con las 3 filas insertadas, la query seguía devolviendo `[]`
+   sin ningún error — la tabla `subscription_plans` tenía RLS activado (`relrowsecurity = true`)
+   sin ninguna policy, así que devolvía cero filas a cualquier rol en silencio (RLS sin policies =
+   deniega todo, no tira error). Se verificó con `select relrowsecurity from pg_class where
+   relname = 'subscription_plans';` y se resolvió con `alter table public.subscription_plans
+   disable row level security;` — es un catálogo de precios público, no necesita RLS (a diferencia
+   de `gym_subscriptions`, que sí la tiene a propósito). **Si otra tabla nueva "no devuelve nada
+   pero tampoco tira error", sospechar RLS sin policies antes que cualquier otra cosa.**
+3. **Mercado Pago rechaza `back_url` en local**: sin `NEXT_PUBLIC_SITE_URL` seteada,
+   `getSiteUrl()` cae a `http://localhost:3000`, y la API de MP lo rechaza con `"Invalid value for
+   back_url, must be a valid URL"` (necesita una URL https real, no localhost). Se resolvió
+   seteando `NEXT_PUBLIC_SITE_URL` a un dominio inventado con https (`https://constano-test.example.com`,
+   dejado en `.env.local` con un comentario explicando por qué) — Stripe no tuvo este problema
+   (acepta `http://localhost:3000` en `success_url`/`cancel_url` sin quejarse). **Para probar MP
+   localmente en cualquier sesión futura, `NEXT_PUBLIC_SITE_URL` tiene que apuntar a algo con
+   https, no puede quedar sin setear.**
+
+**Episodio de seguridad de esta sesión, vale la pena que quede documentado**: en un momento
+Matías pegó por error una publishable key de Stripe **live** (`pk_live_...`), y después —
+confundiendo la respuesta de una pregunta de confirmación— pareció autorizar usar también la
+secret key **live** (`sk_live_...`) que había pegado. Se llegó a cablear un momento en
+`.env.local`, pero Matías aclaró enseguida que NO lo había autorizado y se sacó de inmediato
+(quedó vacío hasta que mandó las claves `pk_test_`/`sk_test_` correctas). **Ninguna clave live
+llegó a usarse para generar un checkout real** — se esperó a las de test antes de verificar
+Stripe. Lección: cuando una respuesta de confirmación sobre algo tan sensible como una clave de
+pago en producción llega ambigua o se contradice después, tratarla como no confirmada y volver a
+preguntar, en vez de asumir.
+
+### Pendiente explícito para la Parte 2 (no tocar en la Parte 1 a propósito)
+- Webhooks de Mercado Pago y Stripe (`/api/webhooks/mercadopago`, `/api/webhooks/stripe`) que
+  actualicen `gym_subscriptions`/`gyms.subscription_status`/`gyms.current_plan_id` con la service
+  role key.
+- Bloqueo real de crear/editar cuando `isGymBlocked()` da `true` (middleware o chequeo en cada
+  Server Action sensible) — la función ya existe y está lista, solo falta conectarla.
+- Sincronizar `gyms.grace_period_ends_at` de verdad (hoy se calcula on-the-fly en
+  `getSubscriptionStatus`, funciona bien para mostrar el estado pero no persiste nada).

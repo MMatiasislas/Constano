@@ -260,3 +260,54 @@ export type Payment = {
 export type PaymentWithMember = Payment & {
   members: Pick<Member, "id" | "first_name" | "last_name" | "phone" | "photo_url">;
 };
+
+// Estado de la suscripción del GYM a Constano (lo que el gym nos paga a
+// nosotros) — no confundir con `MembershipStatus`/`Plan` de arriba, que es
+// la cuota que el gym le cobra a SUS alumnos.
+export type GymSubscriptionStatus = "trial" | "grace_period" | "active" | "suspended";
+
+export type Gym = {
+  id: string;
+  name: string;
+  slug: string;
+  timezone: string;
+  trial_ends_at: string | null;
+  grace_period_ends_at: string | null;
+  subscription_status: string;
+  current_plan_id: string | null;
+  settings: Record<string, unknown>;
+  logo_url: string | null;
+  created_at: string;
+};
+
+export type SubscriptionPlanId = "basic" | "pro" | "max";
+
+export type SubscriptionPlan = {
+  id: SubscriptionPlanId;
+  name: string;
+  price_ars: number;
+  max_members: number | null;
+  features: string[];
+  active: boolean;
+};
+
+export const PAYMENT_PROVIDERS = [
+  { value: "mercadopago", label: "Mercado Pago" },
+  { value: "stripe", label: "Stripe" },
+] as const;
+
+export type PaymentProvider = (typeof PAYMENT_PROVIDERS)[number]["value"];
+
+export type GymSubscriptionRecordStatus = "pending" | "active" | "cancelled" | "failed";
+
+export type GymSubscriptionRecord = {
+  id: string;
+  gym_id: string;
+  plan_id: SubscriptionPlanId;
+  provider: PaymentProvider;
+  provider_subscription_id: string | null;
+  status: GymSubscriptionRecordStatus;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  created_at: string;
+};

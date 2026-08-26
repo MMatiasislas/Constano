@@ -31,6 +31,7 @@ const configSubItems = [
   { href: "/dashboard/configuracion/mensajes", label: "Mensajes" },
   { href: "/dashboard/configuracion/planes", label: "Planes" },
   { href: "/dashboard/configuracion/kiosco", label: "Kiosco" },
+  { href: "/dashboard/configuracion/suscripcion", label: "Suscripción" },
 ];
 
 function isPathActive(pathname: string, href: string) {
