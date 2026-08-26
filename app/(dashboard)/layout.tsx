@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getDatePartsInBA } from "@/lib/attendance";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
+import { OnboardingDialog } from "@/components/dashboard/onboarding-dialog";
 
 function hoyEnBAString() {
   const { year, month, day } = getDatePartsInBA(new Date());
@@ -26,7 +27,11 @@ export default async function DashboardLayout({
 
   const [{ data: profile }, { count: alertasAbiertasCount }, { count: pagosVencidosCount }] =
     await Promise.all([
-      supabase.from("users").select("full_name, gyms(name)").eq("id", user.id).single(),
+      supabase
+        .from("users")
+        .select("full_name, onboarding_seen_at, gyms(name)")
+        .eq("id", user.id)
+        .single(),
       // Solo cuenta `active` (no `contacted`): el badge es un indicador de
       // "casos nuevos sin atender todavía" — apenas alguien marca una como
       // contactada, ya está siendo trabajada y no debería seguir inflando el
@@ -51,6 +56,7 @@ export default async function DashboardLayout({
   const gymName =
     (profile?.gyms as unknown as { name: string } | null)?.name ?? "Tu gimnasio";
   const fullName = profile?.full_name ?? user.email ?? "";
+  const showOnboarding = !profile?.onboarding_seen_at;
 
   return (
     <div className="flex flex-1">
@@ -70,6 +76,7 @@ export default async function DashboardLayout({
         </header>
         <main className="flex-1 bg-muted/20 p-6 print:bg-white print:p-0">{children}</main>
       </div>
+      {showOnboarding && <OnboardingDialog defaultOpen />}
     </div>
   );
 }
