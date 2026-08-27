@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import type { SubscriptionPlan } from "@/types/db";
 
 const CUSTOM_PLAN_MESSAGE =
-  "Hola! Mi gimnasio ya tiene más de 200 alumnos, quiero consultar por un plan Custom en Constano.";
+  "Hola! Mi gimnasio tiene más de 100 alumnos, quiero consultar por un plan a medida en Constano.";
 
 export default async function SuscripcionPage() {
   const gymId = await getCurrentGymId();
@@ -38,7 +38,9 @@ export default async function SuscripcionPage() {
 
       <EstadoSuscripcionCard statusInfo={statusInfo} planName={currentPlanName} />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        className={plans.length > 1 ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "max-w-sm"}
+      >
         {plans.map((plan) => (
           <PlanCard key={plan.id} plan={plan} isCurrent={plan.id === currentPlanId} />
         ))}
@@ -47,9 +49,10 @@ export default async function SuscripcionPage() {
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-4 py-5">
           <div>
-            <p className="font-medium text-foreground">¿Más de 200 alumnos?</p>
+            <p className="font-medium text-foreground">¿Tu gimnasio es más grande?</p>
             <p className="text-sm text-muted-foreground">
-              Armamos un plan Custom a medida de tu gimnasio.
+              Armamos un plan a medida para gimnasios con más de 100 alumnos, cadenas o
+              necesidades especiales. Sin vueltas, hablamos y lo resolvemos.
             </p>
           </div>
           <Button
@@ -64,7 +67,7 @@ export default async function SuscripcionPage() {
             }
           >
             <MessageCircle />
-            Hablanos por WhatsApp
+            Hablar por WhatsApp
           </Button>
         </CardContent>
       </Card>

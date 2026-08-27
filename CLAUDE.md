@@ -1272,3 +1272,29 @@ invitación") en vez de romper la página — confirma que el manejo de errores 
 - Sigue pendiente también todo lo de la Parte 2 de suscripciones de arriba (webhooks, service
   role key, Stripe webhook secret) — nada de esto se tocó ni se rompió en esta sesión, solo quedó
   sin avanzar porque la sesión pasó a esta tarea de roles antes de terminarlo.
+
+**Actualización posterior**: la migración 012 se corrió y el flujo completo de invitaciones se
+verificó de punta a punta en una sesión siguiente (owner invita → staff acepta → permisos
+correctos). Detalle completo quedó en la memoria de Claude (`project_constano_saas.md`), no se
+retro-documentó acá.
+
+## Semana 10, Bloque A — actualización posterior: de 3 planes a 1 plan único + Custom
+
+El modelo de precios original de esta sección (Basic/Pro/Max, ver más arriba) cambió: ahora es
+**un solo plan ("Constano", $50.000/mes, hasta 100 alumnos) + Custom** para gimnasios más grandes.
+Mismo cambio aplicado en 2 lugares:
+
+- **Landing** (`components/marketing/pricing-section.tsx`, hardcodeado, no lee la DB): 2 cards —
+  "Constano" (destacada, "Todo incluido") + "¿Tu gimnasio es más grande?" (Custom, botón "Hablar
+  por WhatsApp").
+- **Dashboard** (`/dashboard/configuracion/suscripcion`): sigue leyendo `subscription_plans` en
+  vivo (sin cambios de código en `plan-card.tsx`, ya era genérico) — la reducción a 1 plan activo
+  la hace la migración `013_single_plan.sql` (desactiva `basic`/`max`, renombra `pro` a
+  "Constano"). El grid de cards pasó a ser condicional (`max-w-sm` si queda 1 sola, grid de 3
+  columnas si hay más) para que no se vea perdida una card sola en una grilla ancha.
+- **`max_members` es solo informativo** — no hay ninguna validación real en Server Actions ni en
+  el checkout que bloquee crear el alumno 101; si en algún momento se pide hacerlo cumplir de
+  verdad, hay que agregarlo, no asumir que ya existe.
+- **Pendiente**: correr `supabase/migrations/013_single_plan.sql` en Supabase — hasta entonces el
+  dashboard sigue mostrando Basic/Pro/Max (el copy de la card Custom ya está actualizado
+  independientemente de la migración).
