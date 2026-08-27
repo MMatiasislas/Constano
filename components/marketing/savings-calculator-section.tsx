@@ -11,12 +11,14 @@ const MIN_STUDENTS = 25;
 const MAX_STUDENTS = 300;
 const STEP = 5;
 
-// Fórmula conservadora, a propósito no la versión optimista:
-// - 30 segundos por alumno por semana ahorrados en asistencia manual (check-in por QR)
-// - 2 minutos por alumno por mes ahorrados en cobros y seguimiento manual
-const WEEKLY_ATTENDANCE_MINUTES_SAVED_PER_STUDENT = 0.5;
+// Fórmula realista de cuánto tiempo se ahorra un gimnasio por alumno:
+// - 3 minutos por alumno por semana en asistencia manual (marcar, buscar al
+//   alumno en la lista, corregir errores de carga)
+// - 8 minutos por alumno por mes en cobros y seguimiento manual (cobrar,
+//   anotar el pago, buscar deudores, mandar mensajes de recordatorio)
+const WEEKLY_ATTENDANCE_MINUTES_SAVED_PER_STUDENT = 3;
 const WEEKS_PER_MONTH = 4;
-const MONTHLY_BILLING_MINUTES_SAVED_PER_STUDENT = 2;
+const MONTHLY_BILLING_MINUTES_SAVED_PER_STUDENT = 8;
 const WORKDAY_HOURS = 8;
 
 function calculateSavings(students: number) {
@@ -38,7 +40,7 @@ export function SavingsCalculatorSection() {
   const percent = ((students - MIN_STUDENTS) / (MAX_STUDENTS - MIN_STUDENTS)) * 100;
 
   return (
-    <section className="bg-muted/40 px-4 py-20 sm:px-6 sm:py-28">
+    <section className="bg-background px-4 py-20 sm:px-6 sm:py-28">
       <div className="mx-auto max-w-3xl">
         <RevealOnScroll className="mx-auto max-w-2xl text-center">
           <span className="text-xs font-semibold tracking-widest text-brand-600 uppercase">

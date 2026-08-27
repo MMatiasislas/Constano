@@ -6,9 +6,9 @@ import { HeroSection } from "@/components/marketing/hero-section";
 import { ProblemSection } from "@/components/marketing/problem-section";
 import { FeaturesSection } from "@/components/marketing/features-section";
 import { HowItWorksSection } from "@/components/marketing/how-it-works-section";
-import { PricingSection } from "@/components/marketing/pricing-section";
 import { ComparisonSection } from "@/components/marketing/comparison-section";
 import { SavingsCalculatorSection } from "@/components/marketing/savings-calculator-section";
+import { PricingSection } from "@/components/marketing/pricing-section";
 import { FinalCtaSection } from "@/components/marketing/final-cta-section";
 import { FooterSection } from "@/components/marketing/footer-section";
 
@@ -37,9 +37,9 @@ export default async function Home() {
         <ProblemSection />
         <FeaturesSection />
         <HowItWorksSection />
-        <PricingSection />
         <ComparisonSection />
         <SavingsCalculatorSection />
+        <PricingSection />
         <FinalCtaSection />
       </main>
       <FooterSection />

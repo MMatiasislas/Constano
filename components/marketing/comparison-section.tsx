@@ -86,17 +86,17 @@ function WinCell({ text, isLast }: { text: string; isLast: boolean }) {
 
 export function ComparisonSection() {
   return (
-    <section className="bg-background px-4 py-20 sm:px-6 sm:py-28">
+    <section className="bg-muted/40 px-4 py-20 sm:px-6 sm:py-28">
       <div className="mx-auto max-w-5xl">
         <RevealOnScroll className="mx-auto max-w-2xl text-center">
           <span className="text-xs font-semibold tracking-widest text-brand-600 uppercase">
-            Comparativa
+            La diferencia es clara
           </span>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-balance sm:text-4xl">
-            ¿Planilla, otro software o Constano?
+            Dejá de perder tiempo y alumnos
           </h2>
           <p className="mt-4 text-lg text-muted-foreground text-pretty">
-            Lo que te cuesta cada opción de verdad — en plata y en horas.
+            Esto es lo que cambia cuando pasás de planillas o de otro software a Constano.
           </p>
         </RevealOnScroll>
 
