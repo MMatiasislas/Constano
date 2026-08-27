@@ -311,3 +311,27 @@ export type GymSubscriptionRecord = {
   current_period_end: string | null;
   created_at: string;
 };
+
+export type UserRole = "owner" | "staff";
+
+export type TeamMember = {
+  id: string;
+  gym_id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+  created_at: string;
+};
+
+export type TeamInvitationStatus = "pending" | "accepted" | "expired";
+
+export type TeamInvitation = {
+  id: string;
+  gym_id: string;
+  email: string;
+  token: string;
+  invited_by: string | null;
+  status: TeamInvitationStatus;
+  expires_at: string;
+  created_at: string;
+};

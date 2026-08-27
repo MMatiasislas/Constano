@@ -11,27 +11,35 @@ import {
   HeartPulseIcon,
   CreditCardIcon,
   SettingsIcon,
+  BarChart3Icon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard", label: "Inicio", icon: LayoutDashboardIcon },
-  { href: "/dashboard/alumnos", label: "Alumnos", icon: UsersIcon },
-  { href: "/dashboard/asistencia", label: "Asistencia", icon: CalendarCheckIcon },
-  { href: "/dashboard/ejercicios", label: "Ejercicios", icon: LibraryIcon },
-  { href: "/dashboard/rutinas/plantillas", label: "Plantillas", icon: LayoutTemplateIcon },
-  { href: "/dashboard/retencion", label: "Retención", icon: HeartPulseIcon },
-  { href: "/dashboard/pagos", label: "Pagos", icon: CreditCardIcon },
+  { href: "/dashboard", label: "Inicio", icon: LayoutDashboardIcon, ownerOnly: false },
+  { href: "/dashboard/negocio", label: "Negocio", icon: BarChart3Icon, ownerOnly: true },
+  { href: "/dashboard/alumnos", label: "Alumnos", icon: UsersIcon, ownerOnly: false },
+  { href: "/dashboard/asistencia", label: "Asistencia", icon: CalendarCheckIcon, ownerOnly: false },
+  { href: "/dashboard/ejercicios", label: "Ejercicios", icon: LibraryIcon, ownerOnly: false },
+  {
+    href: "/dashboard/rutinas/plantillas",
+    label: "Plantillas",
+    icon: LayoutTemplateIcon,
+    ownerOnly: false,
+  },
+  { href: "/dashboard/retencion", label: "Retención", icon: HeartPulseIcon, ownerOnly: false },
+  { href: "/dashboard/pagos", label: "Pagos", icon: CreditCardIcon, ownerOnly: false },
 ];
 
 const configSubItems = [
-  { href: "/dashboard/configuracion/general", label: "General" },
-  { href: "/dashboard/configuracion/retencion", label: "Retención" },
-  { href: "/dashboard/configuracion/mensajes", label: "Mensajes" },
-  { href: "/dashboard/configuracion/planes", label: "Planes" },
-  { href: "/dashboard/configuracion/kiosco", label: "Kiosco" },
-  { href: "/dashboard/configuracion/suscripcion", label: "Suscripción" },
+  { href: "/dashboard/configuracion/general", label: "General", ownerOnly: false },
+  { href: "/dashboard/configuracion/retencion", label: "Retención", ownerOnly: false },
+  { href: "/dashboard/configuracion/mensajes", label: "Mensajes", ownerOnly: false },
+  { href: "/dashboard/configuracion/planes", label: "Planes", ownerOnly: false },
+  { href: "/dashboard/configuracion/kiosco", label: "Kiosco", ownerOnly: false },
+  { href: "/dashboard/configuracion/suscripcion", label: "Suscripción", ownerOnly: false },
+  { href: "/dashboard/configuracion/equipo", label: "Equipo", ownerOnly: true },
 ];
 
 function isPathActive(pathname: string, href: string) {
@@ -41,9 +49,11 @@ function isPathActive(pathname: string, href: string) {
 export function SidebarNav({
   retentionAlertCount = 0,
   pagosVencidosCount = 0,
+  isOwner = false,
 }: {
   retentionAlertCount?: number;
   pagosVencidosCount?: number;
+  isOwner?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -52,9 +62,12 @@ export function SidebarNav({
     "/dashboard/pagos": pagosVencidosCount,
   };
 
+  const visibleNavItems = navItems.filter((item) => !item.ownerOnly || isOwner);
+  const visibleConfigSubItems = configSubItems.filter((item) => !item.ownerOnly || isOwner);
+
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {navItems.map((item) => {
+      {visibleNavItems.map((item) => {
         const isActive = isPathActive(pathname, item.href);
         const Icon = item.icon;
         const badgeCount = badgeCountByHref[item.href] ?? 0;
@@ -95,7 +108,7 @@ export function SidebarNav({
           Configuración
         </div>
         <div className="flex flex-col gap-1 pl-7">
-          {configSubItems.map((item) => {
+          {visibleConfigSubItems.map((item) => {
             const isActive = isPathActive(pathname, item.href);
 
             return (

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentGymId } from "@/lib/auth/get-gym-id";
+import { requireActiveSubscription } from "@/lib/auth/require-active-subscription";
 import { createClient } from "@/lib/supabase/server";
 import {
   routineDayNameSchema,
@@ -22,6 +23,7 @@ export async function createRoutine(memberId: string, values: RoutineFormValues)
   const data = parsed.data;
 
   try {
+    await requireActiveSubscription();
     const gymId = await getCurrentGymId();
     const supabase = await createClient();
     const {

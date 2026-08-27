@@ -7,6 +7,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
 import {
+  isSubscriptionSuspendedError,
+  notifySubscriptionSuspended,
+} from "@/components/suscripcion/subscription-toast";
+import {
   memberFormSchema,
   weeklyFrequencyItems,
   weeklyFrequencyOptions,
@@ -81,7 +85,11 @@ export function MemberForm({
     const result = await onSubmit(values, photo);
 
     if (result?.error) {
-      toast.error(errorTitle, { description: result.error });
+      if (isSubscriptionSuspendedError(result.error)) {
+        notifySubscriptionSuspended();
+      } else {
+        toast.error(errorTitle, { description: result.error });
+      }
       setLoading(false);
     }
   }

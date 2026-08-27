@@ -9,6 +9,10 @@ import { PlusIcon } from "lucide-react";
 
 import { createRoutine } from "@/app/(dashboard)/dashboard/alumnos/[id]/rutinas/actions";
 import {
+  isSubscriptionSuspendedError,
+  notifySubscriptionSuspended,
+} from "@/components/suscripcion/subscription-toast";
+import {
   dayCountItems,
   dayCountOptions,
   monthItems,
@@ -93,7 +97,11 @@ export function NuevaRutinaDialog({
     const result = await createRoutine(memberId, values);
 
     if (result?.error) {
-      toast.error("No pudimos crear la rutina", { description: result.error });
+      if (isSubscriptionSuspendedError(result.error)) {
+        notifySubscriptionSuspended();
+      } else {
+        toast.error("No pudimos crear la rutina", { description: result.error });
+      }
       setLoading(false);
       return;
     }

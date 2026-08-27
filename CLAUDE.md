@@ -1057,11 +1057,218 @@ Stripe. Lección: cuando una respuesta de confirmación sobre algo tan sensible 
 pago en producción llega ambigua o se contradice después, tratarla como no confirmada y volver a
 preguntar, en vez de asumir.
 
-### Pendiente explícito para la Parte 2 (no tocar en la Parte 1 a propósito)
-- Webhooks de Mercado Pago y Stripe (`/api/webhooks/mercadopago`, `/api/webhooks/stripe`) que
-  actualicen `gym_subscriptions`/`gyms.subscription_status`/`gyms.current_plan_id` con la service
-  role key.
-- Bloqueo real de crear/editar cuando `isGymBlocked()` da `true` (middleware o chequeo en cada
-  Server Action sensible) — la función ya existe y está lista, solo falta conectarla.
-- Sincronizar `gyms.grace_period_ends_at` de verdad (hoy se calcula on-the-fly en
-  `getSubscriptionStatus`, funciona bien para mostrar el estado pero no persiste nada).
+## Semana 10, Bloque B — Parte 2: webhooks de Mercado Pago/Stripe + bloqueo real de gyms
+suspendidos. Construida, **sin verificar en vivo todavía** — quedó pendiente cuando la sesión pasó
+a otra tarea (roles de equipo) antes de terminar de correr la migración/probar el flujo completo.
+
+### Variables de entorno nuevas para esta parte
+```
+SUPABASE_SERVICE_ROLE_KEY=   # Supabase → Settings → API → service_role key. SECRETA.
+STRIPE_WEBHOOK_SECRET=       # se genera al crear el endpoint de webhook en Stripe, o con
+                              # `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+```
+Ninguna de las dos está configurada todavía en `.env.local` (quedaron con el valor vacío y un
+comentario explicando de dónde sacarlas) — **pendiente que Matías las complete** antes de poder
+probar los webhooks o la persistencia de `grace_period_ends_at` en vivo.
+
+### `lib/supabase/service-role.ts` (nuevo)
+`createServiceRoleClient()` — cliente de Supabase con la `service_role` key, se salta RLS por
+completo. Se usa en 2 lugares:
+1. Los webhooks (`app/api/webhooks/mercadopago/route.ts`, `.../stripe/route.ts`) — no hay usuario
+   autenticado en ese contexto (los llama MP/Stripe, no el browser).
+2. El UPDATE de `gyms.grace_period_ends_at` dentro de `getSubscriptionStatus()` (ver abajo) — para
+   que funcione sin importar si quien está mirando la pantalla es 'owner' o no (la policy de
+   `gyms` para UPDATE es solo para 'owner', ver `001_enable_rls.sql`).
+
+### `lib/subscription.ts` — cambios
+- `getSubscriptionStatus()` pasó a ser `async`: la primera vez que detecta que el trial venció y
+  `gyms.grace_period_ends_at` sigue en `null`, la calcula (`trial_ends_at + 3 días`) y la persiste
+  con un UPDATE (vía service role) — **única escritura que hace esta función**, envuelta en
+  try/catch para no romper el cálculo si `SUPABASE_SERVICE_ROLE_KEY` todavía no está configurada
+  (se recalcula on-the-fly y reintenta persistir en el próximo request).
+- Nueva función `resolveSubscriptionStatus(gymId)`: junta el fetching de gym + gym_subscription
+  activa + el cálculo, que antes estaba repetido en la página de suscripción — ahora también lo
+  usan el layout del dashboard (para el banner) y `requireActiveSubscription()`. Usa el cliente
+  autenticado normal (`lib/supabase/server.ts`), pensada para Server Components/Server Actions.
+
+### Webhooks
+- `app/api/webhooks/mercadopago/route.ts`: acepta la notificación (soporta el formato IPN viejo
+  por query string `?type=preapproval&id=...` y el formato JSON más nuevo `{type, data: {id}}`,
+  ya que no hay forma de confirmar cuál manda MP sin un webhook real en producción). **Nunca
+  confía en el payload** — siempre re-consulta el estado real de la preapproval a la API de MP
+  con `MERCADOPAGO_ACCESS_TOKEN` antes de escribir nada. `external_reference` (seteado al crear el
+  checkout, `lib/payments/mercadopago.ts`) trae `"{gymId}:{planId}"`, se parsea con `split(":")`.
+  Responde 500 (no 200) ante un error real — a propósito, para que MP reintente la notificación
+  más tarde; solo devuelve 200 cuando se procesó bien O cuando la notificación no era relevante
+  (ej. de un `payment` suelto, no de una preapproval).
+- `app/api/webhooks/stripe/route.ts`: verifica la firma con `stripe.webhooks.constructEvent()` y
+  `STRIPE_WEBHOOK_SECRET` sobre el body **crudo** (`request.text()`, nunca `request.json()` —
+  la verificación de firma necesita el texto sin parsear). Maneja
+  `checkout.session.completed`/`customer.subscription.created`/`.updated`/`.deleted`.
+  - **Bug real de la Parte 1 encontrado y arreglado acá**: `createStripeCheckoutSession()`
+    (`lib/payments/stripe.ts`) mandaba `metadata: {gymId, planId}` en la Session, pero ese
+    metadata NO se copia solo al objeto `Subscription` que Stripe crea — los eventos
+    `customer.subscription.*` solo traen la Subscription, nunca la Session. Sin
+    `subscription_data: {metadata: {...}}` en la creación del checkout, el webhook nunca podría
+    haber identificado a qué gym pertenecía un pago. Ya está arreglado en `lib/payments/stripe.ts`.
+  - **Gotcha real de la API de Stripe, confirmado contra los tipos del SDK instalado (v22), no de
+    memoria**: `current_period_start`/`current_period_end` NO están en el objeto `Subscription`
+    en esta versión de la API — Stripe los movió a nivel de `SubscriptionItem`
+    (`subscription.items.data[0].current_period_start/end`). Si se toca este código y aparece un
+    error de tipos sobre estos campos, es por esto — no volver a `subscription.current_period_end`
+    directo, no existe.
+  - Ambos webhooks: si la suscripción no quedó activa (cancelada/pausada), **a propósito NO tocan
+    `gyms.subscription_status`/`current_plan_id`** — `getSubscriptionStatus()` recalcula el estado
+    real la próxima vez que se consulte (puede seguir en `grace_period` si corresponde, nunca se
+    fuerza a `suspended` desde el webhook).
+
+### Bloqueo real (`lib/auth/require-active-subscription.ts`, nuevo)
+`requireActiveSubscription()`: llama a `resolveSubscriptionStatus()` + `isGymBlocked()`, y si el
+gym está `suspended` tira `new Error(SUBSCRIPTION_SUSPENDED_ERROR)` (la constante vive en
+`lib/subscription-errors.ts`, un archivo sin ninguna otra dependencia para poder importarla tanto
+desde Server Actions como desde Client Components sin arrastrar `next/headers` al bundle del
+cliente). **Aplicada como ejemplo representativo en 3 Server Actions de creación** (no las 40+ del
+proyecto): `createMember` (alumnos/nuevo/actions.ts), `createRoutine`
+(alumnos/[id]/rutinas/actions.ts), `markAttendance` (asistencia/actions.ts) — una sola línea
+(`await requireActiveSubscription();`) al principio del `try` de cada una. **Patrón a replicar**
+en cualquier otra Server Action de creación/edición que se quiera proteger; nunca en acciones de
+lectura ni en `startCheckout`.
+- `components/suscripcion/subscription-toast.ts`: `isSubscriptionSuspendedError(message)` +
+  `notifySubscriptionSuspended()` — cada client component que llama a una de esas 3 acciones
+  chequea el mensaje de error antes de mostrar el toast genérico (`member-form.tsx`,
+  `nueva-rutina-dialog.tsx`, `asistencia-lista.tsx`).
+- `components/suscripcion/subscription-banner.tsx`: banner persistente (sin botón de cerrar, a
+  propósito) montado en `app/(dashboard)/layout.tsx`, arriba del header — solo se renderiza algo
+  en `grace_period` (ámbar) o `suspended` (rojo), null en `trial`/`active`.
+
+### Pendiente real, sin verificar en esta sesión
+- Falta que Matías configure `SUPABASE_SERVICE_ROLE_KEY` y `STRIPE_WEBHOOK_SECRET` en
+  `.env.local`.
+- No se probó el flujo de webhooks en vivo (necesitaría completar un pago de test end-to-end con
+  tarjetas de prueba de MP/Stripe, o simular la notificación a mano).
+- No se probó el bloqueo real simulando `grace_period`/`suspended` con UPDATE manual en Supabase
+  (el flujo de verificación sugerido con `update gyms set trial_ends_at = now() - interval '1
+  day'...` de la Parte 2 original no se llegó a ejecutar).
+- `tsc --noEmit` y `eslint .` sobre el proyecto completo sí están limpios.
+
+## Semana 11: roles de equipo (owner/staff) + invitaciones + panel de negocio privado
+Construido de punta a punta, **verificado en vivo lo que no depende de la migración nueva**
+(dashboard liviano por rol, sidebar, panel de negocio, listado de miembros, manejo de error
+controlado al invitar) — falta correr la migración para poder probar invitaciones/aceptación real.
+
+### Modelo de datos
+`supabase/migrations/012_team_invitations.sql` — **sin correr todavía**, Matías la corre a mano:
+- Tabla `team_invitations` (`token` único, `status` 'pending'|'accepted'|'expired',
+  `expires_at` default a 7 días). RLS: solo `owner` del propio gym puede `select`/`insert`/etc.
+  (policy `for all`) — la página pública de aceptar invitación usa `service_role` para leerla, no
+  hace falta ninguna policy para `anon`.
+- **Se modificó `handle_new_user()`** (el trigger de signup de
+  `002_signup_trigger.sql`) con `create or replace function` — sigue siendo la misma función y el
+  mismo trigger, solo se le agregó una rama nueva al principio: si `raw_user_meta_data` trae un
+  `invitation_token` que matchea una invitación `pending` y todavía no vencida, el usuario se une
+  como `'staff'` al `gym_id` de esa invitación (en vez de crear un gym nuevo como `'owner'`, el
+  comportamiento de siempre) y la invitación se marca `'accepted'` — todo dentro de la misma
+  transacción del INSERT que dispara el trigger. Si el token no está o no es válido, cae al
+  comportamiento normal de siempre (crear gym nuevo), sin romper nada — la Server Action de
+  aceptar invitación igual revalida el token antes de llamar a `signUp()`, así que ese fallback
+  debería ser un caso límite raro en la práctica (ej. el owner cancela la invitación en el
+  segundo exacto entre que el visitante carga la página y aprieta "Crear cuenta").
+  - **Por qué no se podía evitar tocar este trigger**: `auth.signUp()` siempre dispara
+    `handle_new_user()` sin importar cómo se llame (client-side normal, o
+    `admin.createUser()` con service role) — sin esta rama nueva, CUALQUIER alta de un
+    invitado hubiera creado un gym fantasma nuevo y un `public.users` con rol `'owner'`
+    duplicado, chocando además con el insert manual que se hubiera intentado hacer aparte.
+    Modificar el trigger para que sepa distinguir el caso era la única forma limpia.
+
+### Roles (`lib/auth/require-owner.ts`, nuevo)
+- `getCurrentUserRole()`: cacheada con `cache()` de React, mismo patrón que
+  `getCurrentGymId()` (`lib/auth/get-gym-id.ts`).
+- `isOwner()`: boolean, para chequeos condicionales en UI (sidebar, home del dashboard).
+- `requireOwner(redirectTo?)`: protección REAL server-side — si no es owner, hace `redirect()` a
+  `redirectTo` (default `/dashboard/alumnos`) con `?toast=sin-acceso` agregado en la URL. Usada al
+  principio de `/dashboard/negocio` y `/dashboard/configuracion/equipo`.
+- `components/dashboard/query-toast.tsx`: `<QueryToast />`, montado en
+  `app/(dashboard)/layout.tsx`. Lee `?toast=<key>` de la URL, muestra el toast correspondiente
+  (por ahora solo `sin-acceso`) y limpia el parámetro con `router.replace()` para que no reaparezca
+  al recargar. Envuelto en `<Suspense>` porque usa `useSearchParams()`.
+
+### Panel de negocio (`/dashboard/negocio`)
+Es el Dashboard de Inicio viejo, movido tal cual (los 4 KPIs con ingresos, los 2 gráficos, las 3
+listas — **contenido idéntico**, ver el `page.tsx` completo) — el único cambio real es agregar
+`await requireOwner();` como primera línea del componente. `/dashboard` (la home) pasó a ser una
+pantalla nueva, liviana:
+- **Owner**: 3 KPIs sin ningún monto de facturación (alumnos activos, asistencia semanal,
+  alertas de retención — reusa los mismos helpers de `lib/dashboard-stats.ts`, salteando a
+  propósito `getMonthlyRevenue`) + una card destacada "Ver panel de negocio →" + los mismos
+  accesos rápidos que ve el staff.
+- **Staff**: directo los accesos rápidos (Alumnos/Asistencia/Retención), sin ningún KPI ni monto.
+- El flag `owner`/`staff` se resuelve una sola vez con `isOwner()` y se usa tanto para decidir qué
+  mostrar como para saltear las queries de KPIs cuando no hacen falta (`owner ? getX(gymId) :
+  Promise.resolve(null)`).
+
+### Sidebar (`components/dashboard/sidebar-nav.tsx`)
+Cada item de `navItems`/`configSubItems` ahora tiene un flag `ownerOnly` — el componente filtra
+la lista completa con `.filter(item => !item.ownerOnly || isOwner)` antes de renderizar, en vez de
+ocultar con CSS. `SidebarNav` recibe un nuevo prop `isOwner` desde el layout (se resuelve ahí con
+una sola columna extra en la query de `profile` que ya existía, no hace falta una query aparte).
+**Esto es solo la parte de UX** — la protección real está en `requireOwner()` server-side en cada
+página; ocultar el link no alcanzaría solo por sí mismo si alguien pega la URL directo.
+
+### Invitaciones (`/dashboard/configuracion/equipo`, solo owner)
+- `app/(dashboard)/dashboard/configuracion/equipo/actions.ts`: `inviteTeamMember({email})` valida
+  que el email no sea ya parte del equipo, reusa una invitación pendiente y vigente si ya existía
+  una para ese email (no duplica), si no genera un token con `randomUUID()` e inserta. Devuelve
+  **el token, no la URL completa** — el cliente arma el link con `window.location.origin` en vez
+  de depender de `NEXT_PUBLIC_SITE_URL` (esa variable puede estar apuntando a un dominio de
+  prueba en dev, ver la nota de Mercado Pago en la Parte 1/2 de suscripciones — usar esa misma
+  variable acá hubiera mostrado un link roto en local). `cancelInvitation(id)` hace un DELETE
+  directo (el schema de `status` no tiene un estado "cancelled" propio, solo
+  pending/accepted/expired — cancelar borra la fila en vez de forzar un estado que no existe).
+- `components/equipo/invitar-miembro-dialog.tsx`: un solo Dialog con 2 pasos internos (form de
+  email → muestra el link generado con botón "Copiar"), sin cerrar y reabrir un dialog nuevo.
+- `components/equipo/invitaciones-table.tsx` / `miembros-table.tsx`: la de miembros es 100%
+  Server Component (el único "interactivo" es un botón deshabilitado con `title` nativo como
+  tooltip — **mismo criterio ya documentado más arriba para "Duplicar"/"Exportar PDF" de
+  rutinas**, no hay componente Tooltip en el proyecto). El owner nunca ve un botón de
+  eliminar/cambiar rol en su propia fila (el botón de eliminar directamente no se renderiza para
+  `role === "owner"`).
+- **Eliminar un miembro del equipo quedó sin implementar a propósito** (pedido explícito de la
+  tarea, priorizando que la invitación funcione end-to-end) — el botón está deshabilitado con
+  tooltip "Próximamente". TODO documentado en `actions.ts`: borrar de verdad necesitaría tocar
+  `auth.users` con la service role key, y hay que decidir si es un hard-delete o una
+  desactivación antes de implementarlo.
+- **Envío automático de la invitación por email todavía no existe** (tampoco pedido para esta
+  parte) — TODO documentado en `lib/team.ts` (`buildInvitationUrl()`, sin uso todavía desde el
+  dialog, queda lista para cuando se integre Resend server-side) y en el propio dialog: por ahora
+  el owner copia el link a mano y se lo manda por WhatsApp/email.
+
+### Aceptar invitación (`/invitacion/[token]`, pública, sin auth)
+`app/invitacion/layout.tsx` mismo layout centrado que `(auth)/layout.tsx` (copiado, no compartido
+— son route groups distintos). El `page.tsx` usa `service_role` (no el cliente normal, RLS se lo
+impediría) para validar el token: existe, `status='pending'`, no vencido. Si es válido, muestra
+`components/invitacion/aceptar-invitacion-form.tsx` (nombre completo + password, **el email viene
+fijo de la invitación y no es editable** — se muestra como texto, no como input). Al confirmar,
+llama a `supabase.auth.signUp()` client-side pasando `invitation_token` en `options.data`, que es
+lo que el trigger de la migración 012 usa para decidir la rama "unirse a un gym existente". Mismo
+manejo de `!data.session` (confirmación de email pendiente → redirige a `/login` con un toast) que
+ya usa `app/(auth)/signup/page.tsx`, copiado tal cual por consistencia.
+
+### Probado en vivo en esta sesión (con la cuenta owner existente, SIN correr la migración 012)
+Confirmado que todo lo que no toca `team_invitations` funciona ya, incluso sin la migración:
+sidebar muestra "Negocio" y "Equipo" (owner), `/dashboard` liviano con los 3 KPIs sin plata + card
+de negocio + accesos rápidos, `/dashboard/negocio` con el contenido completo movido (incluye
+"Ingresos del mes"), `/dashboard/configuracion/equipo` carga y muestra al owner en la tabla de
+miembros (0 invitaciones pendientes, gracefully). Clickear "Invitar miembro del equipo" con
+`team_invitations` todavía inexistente tira un toast de error controlado ("No pudimos crear la
+invitación") en vez de romper la página — confirma que el manejo de errores degrada bien.
+`tsc --noEmit` y `eslint .` sobre el proyecto completo, limpios.
+
+### Pendiente real para la próxima sesión
+- Correr `supabase/migrations/012_team_invitations.sql`.
+- Recién ahí se puede probar el flujo completo: invitar de verdad, copiar el link, abrirlo en
+  incógnito, crear la cuenta de staff, loguearse como staff y confirmar que NO ve "Negocio" ni
+  "Equipo" en el sidebar, que `/dashboard/negocio` redirige con el toast "No tenés acceso a esta
+  sección", y que sigue pudiendo gestionar alumnos/rutinas/asistencia con normalidad.
+- Sigue pendiente también todo lo de la Parte 2 de suscripciones de arriba (webhooks, service
+  role key, Stripe webhook secret) — nada de esto se tocó ni se rompió en esta sesión, solo quedó
+  sin avanzar porque la sesión pasó a esta tarea de roles antes de terminarlo.

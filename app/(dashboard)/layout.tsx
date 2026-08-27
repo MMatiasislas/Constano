@@ -1,10 +1,14 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentGymId } from "@/lib/auth/get-gym-id";
 import { getDatePartsInBA } from "@/lib/attendance";
+import { resolveSubscriptionStatus } from "@/lib/subscription";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { OnboardingDialog } from "@/components/dashboard/onboarding-dialog";
+import { QueryToast } from "@/components/dashboard/query-toast";
+import { SubscriptionBanner } from "@/components/suscripcion/subscription-banner";
 
 function hoyEnBAString() {
   const { year, month, day } = getDatePartsInBA(new Date());
@@ -25,11 +29,13 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  const [{ data: profile }, { count: alertasAbiertasCount }, { count: pagosVencidosCount }] =
+  const gymId = await getCurrentGymId();
+
+  const [{ data: profile }, { count: alertasAbiertasCount }, { count: pagosVencidosCount }, statusInfo] =
     await Promise.all([
       supabase
         .from("users")
-        .select("full_name, onboarding_seen_at, gyms(name)")
+        .select("full_name, onboarding_seen_at, role, gyms(name)")
         .eq("id", user.id)
         .single(),
       // Solo cuenta `active` (no `contacted`): el badge es un indicador de
@@ -51,12 +57,14 @@ export default async function DashboardLayout({
         .eq("status", "active")
         .lt("end_date", hoyEnBAString())
         .eq("members.status", "active"),
+      resolveSubscriptionStatus(gymId),
     ]);
 
   const gymName =
     (profile?.gyms as unknown as { name: string } | null)?.name ?? "Tu gimnasio";
   const fullName = profile?.full_name ?? user.email ?? "";
   const showOnboarding = !profile?.onboarding_seen_at;
+  const userIsOwner = profile?.role === "owner";
 
   return (
     <div className="flex flex-1">
@@ -67,9 +75,12 @@ export default async function DashboardLayout({
         <SidebarNav
           retentionAlertCount={alertasAbiertasCount ?? 0}
           pagosVencidosCount={pagosVencidosCount ?? 0}
+          isOwner={userIsOwner}
         />
       </aside>
       <div className="flex flex-1 flex-col">
+        <QueryToast />
+        <SubscriptionBanner statusInfo={statusInfo} />
         <header className="flex h-14 items-center justify-between border-b border-border px-4 print:hidden">
           <span className="text-sm font-medium text-muted-foreground">{gymName}</span>
           <UserMenu fullName={fullName} email={user.email ?? ""} />

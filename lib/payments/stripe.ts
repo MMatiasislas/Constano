@@ -28,6 +28,11 @@ function getClient() {
  *
  * `client_reference_id`/`metadata` llevan `gymId`/`planId` para que la
  * Parte 2 (webhook de Stripe) pueda identificar el gym al confirmar el pago.
+ * **Importante**: el `metadata` de la Session NO se copia solo al objeto
+ * `Subscription` que Stripe crea — por eso también se manda
+ * `subscription_data.metadata` con lo mismo, que es lo único que llega en
+ * los eventos `customer.subscription.*` del webhook (esos eventos no
+ * incluyen la Session, solo la Subscription).
  */
 export async function createStripeCheckoutSession(
   gymId: string,
@@ -54,6 +59,7 @@ export async function createStripeCheckoutSession(
     customer_email: payerEmail,
     client_reference_id: `${gymId}:${plan.id}`,
     metadata: { gymId, planId: plan.id },
+    subscription_data: { metadata: { gymId, planId: plan.id } },
     line_items: [
       {
         price_data: {

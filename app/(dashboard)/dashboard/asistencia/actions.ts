@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentGymId } from "@/lib/auth/get-gym-id";
+import { requireActiveSubscription } from "@/lib/auth/require-active-subscription";
 import { getEndOfDayISO, getStartOfDayISO } from "@/lib/attendance";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,6 +13,7 @@ type MarkAttendanceResult =
 
 export async function markAttendance(memberId: string): Promise<MarkAttendanceResult> {
   try {
+    await requireActiveSubscription();
     const gymId = await getCurrentGymId();
     const supabase = await createClient();
     const {

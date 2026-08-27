@@ -5,6 +5,10 @@ import { toast } from "sonner";
 import { CheckIcon } from "lucide-react";
 
 import { markAttendance, unmarkAttendance } from "@/app/(dashboard)/dashboard/asistencia/actions";
+import {
+  isSubscriptionSuspendedError,
+  notifySubscriptionSuspended,
+} from "@/components/suscripcion/subscription-toast";
 import { formatearHoraCheckIn } from "@/lib/attendance";
 import { cn } from "@/lib/utils";
 import { ESTADO_BADGE, frecuenciaLabel, getInitials, nombreCompleto } from "@/lib/members";
@@ -124,7 +128,11 @@ export function AsistenciaLista({ members }: { members: MemberWithTodayAttendanc
           )
         )
       );
-      toast.error("No pudimos marcar la asistencia", { description: result.error });
+      if (isSubscriptionSuspendedError(result.error)) {
+        notifySubscriptionSuspended();
+      } else {
+        toast.error("No pudimos marcar la asistencia", { description: result.error });
+      }
       return;
     }
 
