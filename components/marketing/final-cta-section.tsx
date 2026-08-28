@@ -14,7 +14,7 @@ export function FinalCtaSection() {
         <Button
           size="lg"
           nativeButton={false}
-          render={<Link href="/signup" />}
+          render={<Link href="/comenzar" />}
           className="h-12 bg-neutral-950 px-6 text-base text-white hover:bg-neutral-800"
         >
           Probar gratis 7 días

@@ -46,7 +46,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
           </Button>
           <Button
             nativeButton={false}
-            render={<Link href="/signup" />}
+            render={<Link href="/comenzar" />}
             className="bg-brand-500 text-white hover:bg-brand-600"
           >
             Empezar gratis
@@ -87,7 +87,7 @@ export function LandingHeader({ isLoggedIn }: { isLoggedIn: boolean }) {
               </Button>
               <Button
                 nativeButton={false}
-                render={<Link href="/signup" onClick={() => setOpen(false)} />}
+                render={<Link href="/comenzar" onClick={() => setOpen(false)} />}
                 className="bg-brand-500 text-white hover:bg-brand-600"
               >
                 Empezar gratis

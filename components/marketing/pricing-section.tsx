@@ -39,7 +39,7 @@ export function PricingSection() {
               </div>
               <Button
                 nativeButton={false}
-                render={<Link href="/signup" />}
+                render={<Link href="/comenzar" />}
                 className="mt-auto bg-brand-500 text-white hover:bg-brand-600"
               >
                 Empezar gratis

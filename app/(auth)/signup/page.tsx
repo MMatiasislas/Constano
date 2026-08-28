@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 
+import { convertLead } from "./actions";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,16 +44,30 @@ const signupSchema = z
 
 type SignupValues = z.infer<typeof signupSchema>;
 
+// `useSearchParams()` necesita <Suspense> alrededor (mismo patrón que
+// `components/dashboard/query-toast.tsx`) — sin esto Next tira error en
+// build. Los params vienen de /comenzar (nombre del gimnasio + email
+// pre-cargados, ver CLAUDE.md) pero la página funciona igual sin ellos para
+// quien llegue directo a /signup.
 export default function SignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
 
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
     defaultValues: {
-      gymName: "",
+      gymName: searchParams.get("gym_name") ?? "",
       fullName: "",
-      email: "",
+      email: searchParams.get("email") ?? "",
       password: "",
       confirmPassword: "",
     },
@@ -103,6 +118,10 @@ export default function SignupPage() {
       router.push("/login");
       return;
     }
+
+    // No bloqueante: si falla, el signup ya se completó igual — el lead
+    // simplemente queda sin marcar como convertido.
+    convertLead().catch((err) => console.error("[signup] convertLead falló", err));
 
     toast.success("¡Cuenta creada! Bienvenido a Constano.");
     router.push("/dashboard");

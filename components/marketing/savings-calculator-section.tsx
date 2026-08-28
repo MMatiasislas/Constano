@@ -103,7 +103,7 @@ export function SavingsCalculatorSection() {
               <Button
                 size="lg"
                 nativeButton={false}
-                render={<Link href="/signup" />}
+                render={<Link href="/comenzar" />}
                 className="h-12 bg-brand-500 px-6 text-base text-white hover:bg-brand-600"
               >
                 Empezar gratis 7 días

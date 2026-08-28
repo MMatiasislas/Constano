@@ -1325,3 +1325,97 @@ Mismo cambio aplicado en 2 lugares:
 - **Pendiente**: correr `supabase/migrations/013_single_plan.sql` en Supabase — hasta entonces el
   dashboard sigue mostrando Basic/Pro/Max (el copy de la card Custom ya está actualizado
   independientemente de la migración).
+
+**Actualización posterior**: la migración 013 se corrió, con una corrección de precio antes de
+correrla ($30.000, no los $50.000 de la primera versión de este texto y de la landing). Verificado
+en vivo: dashboard con una sola card "Constano" ($30.000/mes) y ambos checkouts (MP y Stripe)
+confirmando el precio correcto. Detalle completo en la memoria de Claude
+(`project_constano_saas.md`), no se retro-documentó acá (mismo criterio que la 012).
+
+## Semana 12: captura de leads antes del signup (/comenzar)
+
+Se interpuso un formulario corto entre la landing y el signup real, para capturar el lead (nombre
+del gimnasio, email, teléfono) incluso si la persona abandona antes de crear la cuenta.
+
+### Flujo
+1. Los botones "Empezar/Empezá/Probar gratis..." de la landing (`hero-section.tsx`,
+   `final-cta-section.tsx`, `pricing-section.tsx`, `savings-calculator-section.tsx`,
+   `landing-header.tsx` ×2 — desktop y menú mobile) apuntan a `/comenzar` en vez de `/signup`
+   directo. El link "¿No tenés cuenta? Registrate" del login sigue apuntando a `/signup` — es la
+   "otra vía" que tiene que seguir funcionando para quien llega directo, a propósito no se tocó.
+2. `/comenzar` (`app/comenzar/`, pública, fuera de `(auth)` y `(dashboard)` — necesita el look
+   oscuro del hero de marketing, no el layout centrado/claro de `(auth)/layout.tsx`): form de
+   nombre del gimnasio + email + teléfono (opcional). Server Action `createLead` (`actions.ts`)
+   valida con `lib/validations/lead.ts`, inserta en `leads` y redirige a
+   `/signup?gym_name=...&email=...` (`redirect()` fuera del try/catch, mismo patrón que
+   `startCheckout` en `dashboard/configuracion/suscripcion/actions.ts` — tira `NEXT_REDIRECT`, no
+   se puede atrapar).
+3. `/signup` (`app/(auth)/signup/page.tsx`) lee esos query params con `useSearchParams()` (envuelto
+   en `<Suspense>`, mismo patrón que `components/dashboard/query-toast.tsx`) y los usa como
+   `defaultValues` de `gymName`/`email` — el visitante los puede editar, no son readonly. Sin
+   params (alguien que llega directo a `/signup`), el form arranca vacío como siempre.
+4. Tras un `signUp()` exitoso **con sesión inmediata**, el cliente llama a la Server Action
+   `convertLead()` (`app/(auth)/signup/actions.ts`, no bloqueante — si falla, solo se loguea, el
+   signup ya se completó igual): busca un lead con el mismo email de la sesión autenticada y
+   `converted_gym_id is null`, lo marca `converted_gym_id = <gym recién creado>` +
+   `converted_at = now()`. El email se lee siempre de la sesión, nunca de un parámetro del caller,
+   para que no se pueda convertir un lead ajeno.
+   - **Caso no cubierto a propósito**: si Supabase requiere confirmación de email (sin `session`
+     inmediata), el gym se crea igual vía el trigger, pero `convertLead()` nunca se llama (no hay
+     sesión para autenticar la Server Action) — el lead queda sin convertir. Quedaría para una
+     vuelta futura intentarlo también en el primer login.
+
+### Modelo de datos
+`supabase/migrations/014_leads.sql` — **sin correr todavía**, Matías la corre a mano. Tabla
+`leads` (`gym_name`, `email`, `phone` nullable, `converted_gym_id` FK a `gyms` con
+`on delete set null`, `converted_at`, `created_at`) **sin RLS a propósito**: no hay concepto de
+`gym_id` acá (es data del negocio de Constano, a quién le vendemos — no un gimnasio cliente
+todavía), y por ahora, sin panel de super-admin, se consulta directo desde el Table Editor de
+Supabase. Índices en `email` y `created_at desc`.
+- **Implicancia de seguridad a tener presente**: sin RLS, cualquiera con la anon key del browser
+  podría en teoría leer o escribir cualquier fila de `leads` desde la consola (no solo insertar el
+  suyo) — aceptado a propósito para esta primera versión (mismo criterio explícito del pedido
+  original), no es un bug. Si en algún momento se arma el panel de super-admin o se expone algo de
+  `leads` a un cliente que no sea 100% de confianza, esto hay que revisarlo (RLS que permita
+  `insert` a cualquiera pero NO `select`/`update` sin service role).
+
+### 2 gotchas reales encontrados verificando en vivo, no bugs del código de esta parte
+1. **Mismo gotcha de RLS ya documentado con `subscription_plans` (Semana 10)**: apenas creada,
+   `leads` tenía RLS activado sin ninguna policy — a diferencia de una lectura silenciosa vacía,
+   acá el `insert` tiraba un 42501 explícito ("new row violates row-level security policy").
+   Se agregó `alter table public.leads disable row level security;` al final de
+   `supabase/migrations/014_leads.sql` (Matías la corrió aparte) — **si aparece otra tabla nueva
+   con este problema, es directamente el patrón a aplicar, no hace falta re-investigar.**
+2. **Bug real y serio, sin relación con leads, encontrado al probar el signup real**: CUALQUIER
+   signup normal (sin `invitation_token`) fallaba con "Database error saving new user" (500) —
+   bug preexistente en `handle_new_user()` desde la migración 012 (Semana 11): `v_invitation` se
+   declaró como `record` sin tipo, y el `select into` que lo llena solo corre dentro del
+   `if v_invitation_token is not null`. En un signup normal ese bloque se saltea entero, así que
+   `v_invitation` queda sin asignar — y `if v_invitation.id is not null` tira "record ... is not
+   assigned yet". Confirmado con una prueba de control: un signup con un `invitation_token`
+   inventado (que fuerza a que el `select into` corra igual, aunque no encuentre filas) funcionaba
+   bien — la única diferencia era justo esa. **Arreglado en
+   `supabase/migrations/015_fix_handle_new_user_record_bug.sql`** (Matías la corrió): se
+   reemplazó el `record` por 2 variables escalares `uuid` (`v_invitation_id`,
+   `v_invitation_gym_id`), que en PL/pgSQL arrancan en NULL sin que haga falta que ningún
+   `select` las toque. **Este bug bloqueaba el signup real de Constano para cualquier visitante
+   normal — no es exclusivo del flujo de leads.**
+
+### Verificado en vivo, de punta a punta, con Playwright headless
+- Click en "Empezá gratis 7 días" del hero → navega a `/comenzar` con el diseño oscuro/verde
+  esperado.
+- **Caso feliz**: completar `/comenzar` → insert real en `leads` → redirect a `/signup` con
+  `gym_name`/`email` pre-cargados (confirmado que coinciden exacto) → completar el resto del
+  signup (nombre, contraseña) → sesión inmediata → redirige a `/dashboard` (onboarding normal) →
+  confirmado en la tabla `leads` que quedó `converted_gym_id` apuntando al gym recién creado y
+  `converted_at` seteado.
+- **Caso de abandono**: completar `/comenzar` → redirect a `/signup` con los datos → cerrar sin
+  completar el signup → el lead queda guardado con `converted_gym_id` en `null`, como se espera.
+- `/signup` sin query params sigue arrancando vacío (la vía directa no se rompió).
+- Sin errores de consola en ningún paso. Todos los datos de prueba (2 leads + el gym/usuario del
+  caso feliz) se borraron al terminar — no quedó nada de esto en la base real.
+
+### Pendiente real
+- No hay panel dentro del dashboard para ver los leads (a propósito, fuera de alcance de esta
+  parte) — mejora futura tipo mini-CRM, mencionada en el pedido original. Por ahora, Table Editor
+  de Supabase.
