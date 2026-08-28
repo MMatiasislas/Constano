@@ -1141,15 +1141,42 @@ lectura ni en `startCheckout`.
   propósito) montado en `app/(dashboard)/layout.tsx`, arriba del header — solo se renderiza algo
   en `grace_period` (ámbar) o `suspended` (rojo), null en `trial`/`active`.
 
-### Pendiente real, sin verificar en esta sesión
-- Falta que Matías configure `SUPABASE_SERVICE_ROLE_KEY` y `STRIPE_WEBHOOK_SECRET` en
-  `.env.local`.
-- No se probó el flujo de webhooks en vivo (necesitaría completar un pago de test end-to-end con
-  tarjetas de prueba de MP/Stripe, o simular la notificación a mano).
-- No se probó el bloqueo real simulando `grace_period`/`suspended` con UPDATE manual en Supabase
-  (el flujo de verificación sugerido con `update gyms set trial_ends_at = now() - interval '1
-  day'...` de la Parte 2 original no se llegó a ejecutar).
-- `tsc --noEmit` y `eslint .` sobre el proyecto completo sí están limpios.
+### Verificado en vivo (2026-08-28) — bloqueo real + banners
+Con `SUPABASE_SERVICE_ROLE_KEY` ya cargada, se probó el flujo completo contra el gym real
+"Suscripcion Test Gym" (`fae9cd60-8b91-4c65-9ff1-13029e598df8`, slug
+`suscripcion-test-gym-e3dc60`, ya existía de la Parte 1) usando Playwright headless (no había
+`chromium-cli` disponible en este entorno) + el cliente service-role para mutar `gyms` entre pasos,
+en vez de pedirle a Matías que corra los UPDATE a mano:
+- Trial normal → sin banner. `trial_ends_at` vencido (`now() - 1 día`) → banner ámbar, calculó y
+  persistió `grace_period_ends_at` solo, mostró **"2 días"** (correcto: `GRACE_PERIOD_DAYS=3` menos
+  el día que el trial ya llevaba vencido — no "3 días" como decía el pedido original, ese número
+  asumía mal la cuenta).
+- `grace_period_ends_at` vencido → banner rojo "Tu cuenta está suspendida...".
+- Intentar crear un alumno en ese estado: `createMember` cortó en `requireActiveSubscription()`,
+  toast exacto de `notifySubscriptionSuspended()` ("Tu cuenta está suspendida / Activá un plan para
+  seguir usando Constano" + botón "Ver planes"), el formulario no se limpió (se puede reintentar
+  tras activar) y **no se creó ninguna fila nueva en `members`** (confirmado por query directa
+  después). La lista `/dashboard/alumnos` se siguió viendo con normalidad (lectura no bloqueada).
+- Logueado como `staff.test.constano@example.com` (mismo gym): ve el mismo banner rojo en
+  `/dashboard`.
+- `console --errors` del browser: sin errores en ningún paso.
+- El gym se devolvió a `trial_ends_at = +7 días`, `grace_period_ends_at = null`,
+  `subscription_status = 'trial'` al terminar — confirmado con una query aparte, sin datos de
+  prueba colgados.
+- Se le seteó una password conocida (`ConstanoTest2026!`) a los 2 usuarios de este gym (owner y
+  staff) vía `auth.admin.updateUserById` para poder loguearse en el test — quedó así, útil para
+  repetir esta verificación en el futuro sin tener que resetear nada.
+
+### Pendiente real
+- `STRIPE_WEBHOOK_SECRET` sigue sin configurar (a pedido explícito, Stripe queda de lado por
+  ahora — el checkout ya construido queda como está, sin webhook).
+- No se probó el webhook de MP con un pago de test real end-to-end (necesita `back_url`/webhook
+  URL pública — ver la nota de Semana 10 más arriba sobre `NEXT_PUBLIC_SITE_URL` en local). Cuando
+  el dominio esté conectado (Semana 11+): configurar en Mercado Pago Developers → la app → Webhooks
+  → URL `https://<dominio>/api/webhooks/mercadopago`, eventos "Suscripciones" (preapproval). Con
+  eso conectado, probar con una tarjeta de prueba de MP (documentadas en su sitio de developers)
+  y confirmar que `gym_subscriptions`/`gyms.subscription_status` se actualizan solos.
+- `tsc --noEmit` sobre el proyecto completo, limpio.
 
 ## Semana 11: roles de equipo (owner/staff) + invitaciones + panel de negocio privado
 Construido de punta a punta, **verificado en vivo lo que no depende de la migración nueva**
