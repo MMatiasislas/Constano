@@ -118,14 +118,14 @@ export function CobrarRenovarDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Monto</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
-                          $
-                        </span>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
+                        $
+                      </span>
+                      <FormControl>
                         <Input type="number" min={0} step="0.01" className="pl-6" {...field} />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

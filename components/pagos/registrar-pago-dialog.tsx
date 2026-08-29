@@ -98,11 +98,11 @@ export function RegistrarPagoDialog({ memberId }: { memberId: string }) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Monto</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
-                          $
-                        </span>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
+                        $
+                      </span>
+                      <FormControl>
                         <Input
                           type="number"
                           min={0}
@@ -111,8 +111,8 @@ export function RegistrarPagoDialog({ memberId }: { memberId: string }) {
                           autoFocus
                           {...field}
                         />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

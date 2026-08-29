@@ -76,14 +76,14 @@ export function PlanForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Precio</FormLabel>
-                <FormControl>
-                  <div className="relative">
-                    <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
-                      $
-                    </span>
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-muted-foreground">
+                    $
+                  </span>
+                  <FormControl>
                     <Input type="number" min={0} step="0.01" className="pl-6" placeholder="15000" {...field} />
-                  </div>
-                </FormControl>
+                  </FormControl>
+                </div>
                 <FormMessage />
               </FormItem>
             )}
