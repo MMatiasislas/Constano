@@ -96,8 +96,8 @@ export function AlumnoAsistenciaTab({
                 className={cn(
                   "w-fit",
                   cumpleFrecuencia
-                    ? "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-                    : "border-transparent bg-red-500/15 text-red-700 dark:text-red-400"
+                    ? "border-transparent bg-success-subtle text-success"
+                    : "border-transparent bg-danger-subtle text-danger"
                 )}
               >
                 {cumpleFrecuencia ? "Cumple" : "Por debajo"}
@@ -141,7 +141,7 @@ export function AlumnoAsistenciaTab({
                   className={cn(
                     "flex aspect-square items-center justify-center rounded-lg text-sm",
                     day.hasAttendance
-                      ? "bg-emerald-500/20 font-medium text-emerald-700 dark:text-emerald-400"
+                      ? "bg-success-subtle font-medium text-success"
                       : "bg-muted text-muted-foreground",
                     day.isToday && "ring-2 ring-ring"
                   )}

@@ -19,7 +19,7 @@ export default async function MensajesConfigPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Mensaje de retención</h1>
+        <h1 className="text-3xl font-medium tracking-tight">Mensaje de retención</h1>
         <p className="text-muted-foreground">
           Personalizá el mensaje que aparece cuando abrís WhatsApp desde una alerta de retención.
           Podés usar las variables {"{nombre}"}, {"{dias}"} y {"{gym}"} que se reemplazan

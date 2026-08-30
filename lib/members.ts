@@ -3,11 +3,11 @@ import type { MemberStatus } from "@/types/db";
 export const ESTADO_BADGE: Record<MemberStatus, { label: string; className: string }> = {
   active: {
     label: "Activo",
-    className: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    className: "border-transparent bg-success-subtle text-success",
   },
   paused: {
     label: "Pausado",
-    className: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    className: "border-transparent bg-warning-subtle text-warning",
   },
   inactive: {
     label: "Inactivo",

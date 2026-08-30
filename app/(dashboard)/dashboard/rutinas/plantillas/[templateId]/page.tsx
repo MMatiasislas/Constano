@@ -77,7 +77,7 @@ export default async function PlantillaDetallePage({ params }: PageProps) {
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">{template.name}</h1>
+            <h1 className="text-3xl font-medium tracking-tight">{template.name}</h1>
             <p className="text-sm text-muted-foreground">Creada el {fechaCreacion}</p>
             {template.description && (
               <p className="max-w-2xl text-sm text-muted-foreground">{template.description}</p>

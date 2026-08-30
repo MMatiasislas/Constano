@@ -21,7 +21,7 @@ export function PasoResultado({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col items-center gap-3 py-6 text-center">
-        <CircleCheckIcon className="size-10 text-emerald-500" />
+        <CircleCheckIcon className="size-10 text-success" />
         <div className="flex flex-col gap-1">
           <p className="text-lg font-medium text-foreground">
             Se importaron {created} {created === 1 ? "alumno nuevo" : "alumnos nuevos"}.

@@ -89,7 +89,7 @@ export function SidebarNav({
               <span
                 className={cn(
                   "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px] font-semibold",
-                  isActive ? "bg-primary-foreground text-primary" : "bg-red-500 text-white"
+                  isActive ? "bg-primary-foreground text-primary" : "bg-danger text-white"
                 )}
               >
                 {badgeCount > 99 ? "99+" : badgeCount}

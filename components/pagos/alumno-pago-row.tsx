@@ -93,7 +93,7 @@ function VencimientoTexto({
 
   if (status === "vencido") {
     return (
-      <span className="text-sm font-medium text-red-600 dark:text-red-400">
+      <span className="text-sm font-medium text-danger">
         Vencido hace {Math.abs(dias)} {Math.abs(dias) === 1 ? "día" : "días"} ({fecha})
       </span>
     );
@@ -101,7 +101,7 @@ function VencimientoTexto({
 
   if (status === "vence_pronto") {
     return (
-      <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+      <span className="text-sm font-medium text-warning">
         Vence en {dias} {dias === 1 ? "día" : "días"} ({fecha})
       </span>
     );

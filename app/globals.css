@@ -47,6 +47,19 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Colores de estado semánticos (dashboard interno) — un único lugar del
+     que salen todos los badges/indicadores de "activo", "vence pronto",
+     "vencido", etc. en toda la app. Nunca usar emerald-500/amber-500/red-500
+     directo en un componente de estado: usar success/warning/danger acá,
+     así cambiar un tono se hace una sola vez. El valor real de cada uno se
+     define por tema más abajo (por ahora solo existe el tema del
+     dashboard, ver `[data-dashboard-theme]`). */
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -89,6 +102,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --success: #0f6e56;
+  --success-subtle: #e1f5ee;
+  --warning: #92620d;
+  --warning-subtle: #fdf1d9;
+  --danger: #b54432;
+  --danger-subtle: #fbeae1;
 }
 
 .dark {
@@ -123,6 +142,70 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/* Tema del dashboard interno (todo lo que vive bajo /dashboard) — separado
+ * del `:root` de arriba a propósito: `:root` sigue siendo la paleta neutra
+ * default de shadcn (la usan /login, /signup, /comenzar y cualquier
+ * pantalla pública que reuse Button/Input/Card), y la landing pública
+ * (app/page.tsx + components/marketing/*) ni siquiera lee estas variables —
+ * arma su propio look oscuro con clases de Tailwind directas
+ * (bg-neutral-950, brand-400/500/600), así que este bloque no la toca para
+ * nada.
+ *
+ * Se activa con el atributo `data-dashboard-theme` en el div raíz de
+ * `app/(dashboard)/layout.tsx` — todo lo que cuelga de ahí (sidebar, header,
+ * las páginas de /dashboard/*) hereda esta paleta vía cascada de CSS normal,
+ * sin tener que tocar cada componente uno por uno. Fondo gris cálido muy
+ * claro + superficies blancas + verde esmeralda como acento (no
+ * protagonista) + los 3 colores de estado (éxito/advertencia/peligro) ya
+ * declarados como fallback en `:root` arriba, redefinidos acá con el mismo
+ * criterio por si en algún momento se quiere una versión distinta para el
+ * dashboard.
+ */
+[data-dashboard-theme] {
+  --background: #f7f7f5;
+  --foreground: #1e211f;
+  --card: #ffffff;
+  --card-foreground: #1e211f;
+  --popover: #ffffff;
+  --popover-foreground: #1e211f;
+  --primary: #1d9e75;
+  --primary-foreground: #ffffff;
+  --secondary: #eef0ed;
+  --secondary-foreground: #1e211f;
+  --muted: #eef0ed;
+  --muted-foreground: #6b6d66;
+  --accent: #e7f5f0;
+  --accent-foreground: #0f6e56;
+  --destructive: #b54432;
+  --border: #e6e7e1;
+  --input: #dcded6;
+  --ring: #1d9e75;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1e211f;
+  --sidebar-primary: #1d9e75;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef0ed;
+  --sidebar-accent-foreground: #1e211f;
+  --sidebar-border: #e6e7e1;
+  --sidebar-ring: #1d9e75;
+  --success: #0f6e56;
+  --success-subtle: #e1f5ee;
+  --warning: #92620d;
+  --warning-subtle: #fdf1d9;
+  --danger: #b54432;
+  --danger-subtle: #fbeae1;
+}
+
+/* Sombra sutil en vez de borde marcado para las cards del dashboard — se
+ * scopea acá (no se toca components/ui/card.tsx) para no afectar las cards
+ * de /login, /signup, etc. que quedan con el estilo shadcn default. */
+[data-dashboard-theme] [data-slot="card"] {
+  box-shadow:
+    0 1px 2px 0 rgb(0 0 0 / 0.04),
+    0 1px 3px 0 rgb(0 0 0 / 0.05);
 }
 
 @layer base {

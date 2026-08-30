@@ -1419,3 +1419,101 @@ Supabase. Índices en `email` y `created_at desc`.
 - No hay panel dentro del dashboard para ver los leads (a propósito, fuera de alcance de esta
   parte) — mejora futura tipo mini-CRM, mencionada en el pedido original. Por ahora, Table Editor
   de Supabase.
+
+## Rediseño visual del dashboard interno (2026-08-30)
+
+Nuevo look profesional para todo lo que vive bajo `/dashboard/*` — la landing pública y
+`/login`/`/signup`/`/comenzar` quedaron completamente intactos. Paleta: fondo gris cálido claro
+(`#f7f7f5`), superficies blancas con sombra sutil (no bordes duros), verde esmeralda como acento
+(`#1d9e75`, el mismo de la marca de la landing) y colores de estado consistentes en toda la app
+(éxito=verde, advertencia=ámbar, peligro=coral, neutral=gris).
+
+### Arquitectura: todo sale de variables CSS, no de tocar pantalla por pantalla
+El sistema de componentes (`components/ui/button.tsx`, `card.tsx`, `badge.tsx`, `input.tsx`, el
+propio `SidebarNav`) **ya estaba 100% armado sobre variables CSS de shadcn** (`bg-primary`,
+`bg-card`, `border-border`, etc.), sin un solo color hardcodeado — así que el rediseño fue,
+mayormente, cambiar los VALORES de esas variables en un solo lugar y dejar que se propagaran
+solas. Eso es la prueba de que valía la pena centralizarlo así desde el principio.
+
+- **`app/globals.css`**: se agregó un bloque `[data-dashboard-theme] { ... }` que redefine
+  `--background`, `--foreground`, `--card`, `--primary`, `--secondary`, `--muted`, `--accent`,
+  `--destructive`, `--border`, `--input`, `--ring`, `--radius` y los `--sidebar-*`, **sin tocar
+  `:root`** (que sigue con la paleta neutra default de shadcn — la usan `/login`, `/signup`,
+  `/comenzar`). También se agregaron 3 pares de tokens semánticos nuevos, registrados en
+  `@theme inline` para que generen utilidades (`bg-success`, `text-warning`, `bg-danger-subtle`,
+  etc.): `--success`/`--success-subtle`, `--warning`/`--warning-subtle`, `--danger`/`--danger-subtle`
+  (con fallback en `:root` también, por si alguna vez se usan fuera del dashboard). Una card con
+  sombra sutil se agrega vía `[data-dashboard-theme] [data-slot="card"] { box-shadow: ...; }` —
+  **no se tocó `card.tsx`** para no afectar las cards de `/login`/`/signup`.
+- **`app/(dashboard)/layout.tsx`**: el div raíz ahora lleva `data-dashboard-theme=""` — todo lo que
+  cuelga de ahí (sidebar, header, `<main>`, todas las páginas de `/dashboard/*`) hereda la paleta
+  por cascada normal de CSS. El `<aside>` y el `<header>` pasaron a usar `bg-sidebar`/`bg-card`
+  explícitamente (antes no tenían fondo propio, heredaban el blanco de `:root`).
+- **Radius**: `--radius` pasó de `0.625rem` a `0.75rem` dentro del scope del dashboard — los
+  botones/inputs (`rounded-lg`) quedan en 12px, las cards (`rounded-xl`) un poco más redondeadas
+  (~17px), sin tocar `card.tsx`/`button.tsx`.
+
+### Colores de estado — 3 archivos centrales, no docenas de componentes sueltos
+Los badges de estado de toda la app ya vivían en 3 mapas centralizados (patrón bueno preexistente,
+no había que inventarlo):
+- `lib/members.ts` → `ESTADO_BADGE` (alumno activo/pausado/inactivo)
+- `lib/payments.ts` → `getMembershipStatusColor` (cuota al día/vence pronto/vencido/sin plan)
+- `lib/retention.ts` → `ALERT_STATUS_BADGE` (alerta activa/contactada/resuelta/descartada)
+
+Los 3 se actualizaron para usar `bg-success-subtle text-success` / `bg-warning-subtle text-warning`
+/ `bg-danger-subtle text-danger` (nunca texto negro plano sobre el fondo de color) en vez de
+`emerald-500`/`amber-500`/`red-500` hardcodeados — la asignación de qué estado usa qué color NO
+cambió, solo el tono real.
+
+Quedaron **~15 archivos sueltos** con el mismo hardcodeo puntual (badges de asistencia, del wizard
+de importar Excel, de la card de suscripción, del trend en `/dashboard/negocio`, etc.) — se
+actualizaron todos al mismo patrón `text-success`/`text-warning`/`text-danger`. Es la excepción
+mencionada en el pedido original ("si tuviste que tocar muchos archivos sueltos... avisame") — se
+avisó: no es que el sistema esté mal centralizado, es que antes de esta sesión no existía un token
+semántico de estado, así que cada pantalla elegía su propio `emerald-500`/`amber-500`/`red-500` a
+mano. Ahora que el token existe, cualquier badge de estado nuevo debe usarlo directo, no volver a
+hardcodear un color de Tailwind.
+
+**No tocado a propósito**: `lib/exercises.ts` (colores por grupo muscular — es una paleta
+categórica de 7 colores, no un sistema de estado semántico, pedido explícitamente fuera de
+alcance) y `components/checkin/*` (son páginas públicas de `/checkin/[gymSlug]/*`, no
+`/dashboard/*`).
+
+### Gráficos (recharts)
+`components/dashboard/membership-status-chart.tsx` tenía su propio mapa de hex planos
+(`#10b981`, `#f59e0b`...) para los slices del pie chart — no podía usar clases de Tailwind (SVG
+`fill`), así que ahora lee `var(--success)`/`var(--warning)`/`var(--danger)`/`var(--muted-foreground)`
+directo, para que un slice y su badge correspondiente sean siempre exactamente el mismo tono.
+`attendance-chart.tsx` ya usaba `var(--primary)`/`var(--muted)` etc., no hizo falta tocarlo.
+
+### KPIs (`components/dashboard/kpi-card.tsx`)
+Número protagonista: `text-2xl font-semibold` → `text-3xl font-medium` (más grande, peso medio en
+vez de semibold pesado, como pide un KPI que se lee "de un vistazo"). El label chico con ícono
+arriba y el `footer` opcional para tendencia ya existían — solo se recolorearon los trends de
+`/dashboard/negocio` (`text-emerald-600`/`text-red-600` → `text-success`/`text-danger`).
+
+### Títulos de página — reemplazo mecánico en 18 archivos
+Los 18 `<h1>` de título de página de `/dashboard/*` usaban el string EXACTO
+`"text-2xl font-semibold tracking-tight"` — se confirmó con grep antes de tocar nada, y se hizo un
+único `sed` sobre los 18 archivos a la vez (`"text-3xl font-medium tracking-tight"`). No fue
+"tocar pantalla por pantalla": fue un solo comando sobre un patrón idéntico ya centralizado por
+convención de código, aunque no viviera en una variable.
+
+### Sin bugs de Base UI esta vez
+No hizo falta escribir a mano ningún componente de `components/ui/` — `Button`/`Card`/`Badge`/
+`Input`/`Select` ya estaban completos y 100% variable-driven, no se tocaron. El único componente
+"de layout propio" tocado fue `SidebarNav` (un solo `bg-red-500 text-white` hardcodeado en el
+contador de notificaciones → `bg-danger text-white`).
+
+### Verificado en vivo — antes/después reales, no solo el código
+Se generó un gym de prueba con datos variados (alumnos activo/pausado/inactivo, membership al
+día/vence pronto/vencido, una alerta de retención activa) y se sacaron capturas de las mismas 6
+pantallas con Playwright **dos veces**: una vez con el código nuevo, después con
+`git stash`/`git stash pop` para volver momentáneamente al código viejo y comparar exactamente los
+mismos datos bajo ambos estilos. Confirmado visualmente: `/dashboard`, `/dashboard/negocio`,
+`/dashboard/alumnos`, la ficha de un alumno, `/dashboard/retencion` y `/dashboard/pagos` comparten
+el mismo look sin haber tocado la estructura de ninguna. La landing (`/`) y `/login` se compararon
+igual y quedaron pixel-a-pixel idénticas entre "antes" y "después" (confirmado además por tamaño
+de archivo casi idéntico del PNG, la diferencia mínima es solo no-determinismo de compresión PNG).
+Todos los datos de prueba se borraron al terminar. `tsc --noEmit` y `eslint .` limpios (mismo
+warning preexistente de siempre, no relacionado).

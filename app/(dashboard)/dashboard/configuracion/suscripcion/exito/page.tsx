@@ -9,7 +9,7 @@ export default function CheckoutExitoPage() {
     <div className="flex flex-1 items-center justify-center py-12">
       <Card className="max-w-md">
         <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
-          <CheckCircle2 className="size-12 text-emerald-500" />
+          <CheckCircle2 className="size-12 text-success" />
           <div>
             <h1 className="text-xl font-semibold tracking-tight">
               ¡Listo! Tu plan está siendo procesado

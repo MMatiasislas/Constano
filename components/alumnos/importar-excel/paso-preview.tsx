@@ -155,7 +155,7 @@ function EstadoBadge({ status }: { status: ProcessedRow["status"] }) {
     return (
       <Badge
         variant="outline"
-        className="border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+        className="border-transparent bg-success-subtle text-success"
       >
         <CheckCircle2Icon className="size-3" />
         Nueva
@@ -167,7 +167,7 @@ function EstadoBadge({ status }: { status: ProcessedRow["status"] }) {
     return (
       <Badge
         variant="outline"
-        className="border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400"
+        className="border-transparent bg-warning-subtle text-warning"
       >
         <TriangleAlertIcon className="size-3" />
         Duplicado
@@ -178,7 +178,7 @@ function EstadoBadge({ status }: { status: ProcessedRow["status"] }) {
   return (
     <Badge
       variant="outline"
-      className="border-transparent bg-red-500/15 text-red-700 dark:text-red-400"
+      className="border-transparent bg-danger-subtle text-danger"
     >
       <XCircleIcon className="size-3" />
       Error

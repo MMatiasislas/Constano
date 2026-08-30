@@ -68,7 +68,7 @@ export function PasoMapeoColumnas({
       </div>
 
       {!tieneNombreMapeado && (
-        <p className="text-sm text-red-600 dark:text-red-400">
+        <p className="text-sm text-danger">
           Mapeá al menos una columna a &quot;Nombre&quot; para continuar.
         </p>
       )}

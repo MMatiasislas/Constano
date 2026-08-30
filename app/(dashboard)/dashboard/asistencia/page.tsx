@@ -82,7 +82,7 @@ export default async function AsistenciaPage({ searchParams }: PageProps) {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Asistencia</h1>
+          <h1 className="text-3xl font-medium tracking-tight">Asistencia</h1>
           <p className="text-muted-foreground">{fechaLarga}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -96,11 +96,11 @@ export default async function AsistenciaPage({ searchParams }: PageProps) {
               Abrir modo kiosco (QR)
             </Button>
           )}
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2">
-            <span className="text-2xl font-semibold text-emerald-700 dark:text-emerald-400">
+          <div className="flex items-center gap-2 rounded-lg border border-success/30 bg-success-subtle px-4 py-2">
+            <span className="text-2xl font-medium text-success">
               {presentesHoy}
             </span>
-            <span className="text-sm text-emerald-700 dark:text-emerald-400">
+            <span className="text-sm text-success">
               {presentesHoy === 1 ? "presente hoy" : "presentes hoy"}
             </span>
           </div>

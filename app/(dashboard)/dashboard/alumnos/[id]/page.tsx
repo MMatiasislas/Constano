@@ -126,7 +126,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
           </Avatar>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">{nombre}</h1>
+              <h1 className="text-3xl font-medium tracking-tight">{nombre}</h1>
               <Badge variant="outline" className={cn(badge.className)}>
                 {badge.label}
               </Badge>
@@ -145,7 +145,7 @@ export default async function AlumnoDetallePage({ params }: PageProps) {
                   href={whatsappHref(alumno.phone)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:underline dark:text-emerald-400"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-success hover:underline"
                 >
                   <MessageCircleIcon className="size-4" />
                   WhatsApp

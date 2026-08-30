@@ -37,7 +37,7 @@ export default async function EquipoPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Equipo</h1>
+          <h1 className="text-3xl font-medium tracking-tight">Equipo</h1>
           <p className="text-muted-foreground">
             Invitá a tus profes o encargados para que usen Constano con vos.
           </p>

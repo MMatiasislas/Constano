@@ -53,7 +53,7 @@ export default async function PagosPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Pagos</h1>
+        <h1 className="text-3xl font-medium tracking-tight">Pagos</h1>
         <p className="text-muted-foreground">Controlá quién está al día y quién debe.</p>
       </div>
 

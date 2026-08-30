@@ -68,7 +68,7 @@ export default async function RetencionPage({ searchParams }: PageProps) {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Retención</h1>
+        <h1 className="text-3xl font-medium tracking-tight">Retención</h1>
         <p className="text-muted-foreground">
           Alumnos que dejaron de venir según tus reglas de retención configuradas.
         </p>

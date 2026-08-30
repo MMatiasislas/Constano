@@ -189,7 +189,7 @@ export function AsistenciaLista({ members }: { members: MemberWithTodayAttendanc
                   {pending ? "Marcando..." : "Marcar"}
                 </Button>
               ) : pending ? (
-                <span className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-700 opacity-70 dark:text-emerald-400">
+                <span className="flex items-center gap-1.5 rounded-lg bg-success-subtle px-3 py-2 text-sm font-medium text-success opacity-70">
                   <CheckIcon className="size-4" />
                   Presente
                 </span>
@@ -199,7 +199,7 @@ export function AsistenciaLista({ members }: { members: MemberWithTodayAttendanc
                     render={
                       <button
                         type="button"
-                        className="flex items-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-2 text-sm font-medium text-emerald-700 outline-none transition-colors hover:bg-emerald-500/25 focus-visible:ring-3 focus-visible:ring-ring/50 dark:text-emerald-400"
+                        className="flex items-center gap-1.5 rounded-lg bg-success-subtle px-3 py-2 text-sm font-medium text-success outline-none transition-colors hover:brightness-95 focus-visible:ring-3 focus-visible:ring-ring/50"
                       />
                     }
                   >

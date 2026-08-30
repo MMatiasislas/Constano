@@ -24,12 +24,12 @@ export function KpiCard({
         href && "hover:ring-foreground/20"
       )}
     >
-      <CardContent className="flex flex-col gap-2">
+      <CardContent className="flex flex-col gap-2.5">
         <div className="flex items-center gap-2 text-muted-foreground">
           <Icon className="size-4" />
           <span className="text-sm">{label}</span>
         </div>
-        <span className="text-2xl font-semibold tracking-tight text-foreground">{value}</span>
+        <span className="text-3xl font-medium tracking-tight text-foreground">{value}</span>
         {footer && <div className="text-sm">{footer}</div>}
       </CardContent>
     </Card>

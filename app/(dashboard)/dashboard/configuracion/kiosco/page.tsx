@@ -17,7 +17,7 @@ export default async function KioscoConfigPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Modo kiosco</h1>
+        <h1 className="text-3xl font-medium tracking-tight">Modo kiosco</h1>
         <p className="text-muted-foreground">
           Configurá el PIN de 4 dígitos que pide la pantalla de check-in por QR para poder salir
           de ese modo.

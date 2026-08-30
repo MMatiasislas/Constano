@@ -110,7 +110,7 @@ export default async function NegocioPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="text-3xl font-medium tracking-tight">
           {primerNombre ? `Hola, ${primerNombre}` : "Hola"}
         </h1>
         <p className="text-muted-foreground">
@@ -145,11 +145,11 @@ export default async function NegocioPage() {
             ) : membersCount.delta === 0 ? (
               <span className="text-muted-foreground">Sin cambios este mes</span>
             ) : membersCount.delta > 0 ? (
-              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <span className="inline-flex items-center gap-1 text-success">
                 <TrendingUpIcon className="size-3.5" />+{membersCount.delta} este mes
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-red-600 dark:text-red-400">
+              <span className="inline-flex items-center gap-1 text-danger">
                 <TrendingDownIcon className="size-3.5" />
                 {membersCount.delta} este mes
               </span>
@@ -175,7 +175,7 @@ export default async function NegocioPage() {
           href="/dashboard/retencion"
           footer={
             openAlertsCount === 0 ? (
-              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+              <span className="inline-flex items-center gap-1 text-success">
                 <CircleCheckIcon className="size-3.5" />
                 Todo bajo control
               </span>

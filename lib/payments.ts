@@ -59,11 +59,11 @@ export function getMembershipStatusLabel(status: MembershipStatusLabel) {
 export function getMembershipStatusColor(status: MembershipStatusLabel) {
   switch (status) {
     case "al_dia":
-      return "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400";
+      return "border-transparent bg-success-subtle text-success";
     case "vence_pronto":
-      return "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400";
+      return "border-transparent bg-warning-subtle text-warning";
     case "vencido":
-      return "border-transparent bg-red-500/15 text-red-700 dark:text-red-400";
+      return "border-transparent bg-danger-subtle text-danger";
     case "sin_plan":
       return "border-transparent bg-muted text-muted-foreground";
   }

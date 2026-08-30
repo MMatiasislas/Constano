@@ -23,7 +23,7 @@ export default async function RetencionConfigPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Reglas de retención</h1>
+          <h1 className="text-3xl font-medium tracking-tight">Reglas de retención</h1>
           <p className="text-muted-foreground">
             Definí cuándo el sistema te avisa que un alumno está en riesgo. Podés tener varias
             reglas activas al mismo tiempo.

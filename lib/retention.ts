@@ -84,9 +84,9 @@ export const ALERT_STATUS_LABELS: Record<RetentionAlertStatus, string> = {
 };
 
 export const ALERT_STATUS_BADGE: Record<RetentionAlertStatus, string> = {
-  active: "border-transparent bg-red-500/15 text-red-700 dark:text-red-400",
-  contacted: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  resolved: "border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  active: "border-transparent bg-danger-subtle text-danger",
+  contacted: "border-transparent bg-warning-subtle text-warning",
+  resolved: "border-transparent bg-success-subtle text-success",
   dismissed: "border-transparent bg-muted text-muted-foreground",
 };
 

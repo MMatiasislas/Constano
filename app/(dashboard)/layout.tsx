@@ -67,9 +67,15 @@ export default async function DashboardLayout({
   const userIsOwner = profile?.role === "owner";
 
   return (
-    <div className="flex flex-1">
-      <aside className="hidden w-56 shrink-0 border-r border-border md:flex md:flex-col print:hidden">
-        <div className="flex h-14 items-center border-b border-border px-4">
+    // `data-dashboard-theme` activa la paleta del dashboard (ver
+    // app/globals.css) — todo lo que cuelga de acá (sidebar, header, las
+    // páginas de /dashboard/*) hereda fondo/acento/colores de estado por
+    // cascada de CSS, sin tocar cada componente. La landing pública y
+    // /login /signup quedan afuera de este div, con la paleta neutra de
+    // siempre.
+    <div className="flex flex-1 bg-background text-foreground" data-dashboard-theme="">
+      <aside className="hidden w-56 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex md:flex-col print:hidden">
+        <div className="flex h-14 items-center border-b border-sidebar-border px-4">
           <span className="text-base font-semibold tracking-tight">Constano</span>
         </div>
         <SidebarNav
@@ -81,11 +87,11 @@ export default async function DashboardLayout({
       <div className="flex flex-1 flex-col">
         <QueryToast />
         <SubscriptionBanner statusInfo={statusInfo} />
-        <header className="flex h-14 items-center justify-between border-b border-border px-4 print:hidden">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-card px-4 print:hidden">
           <span className="text-sm font-medium text-muted-foreground">{gymName}</span>
           <UserMenu fullName={fullName} email={user.email ?? ""} />
         </header>
-        <main className="flex-1 bg-muted/20 p-6 print:bg-white print:p-0">{children}</main>
+        <main className="flex-1 bg-background p-6 print:bg-white print:p-0">{children}</main>
       </div>
       {showOnboarding && <OnboardingDialog defaultOpen />}
     </div>

@@ -7,14 +7,15 @@ import type { MembershipStatusLabel } from "@/lib/payments";
 import type { MembershipStatusBreakdown } from "@/lib/dashboard-stats";
 
 // Mismos colores que los badges de estado de cuota (lib/payments.ts,
-// getMembershipStatusColor) pero como hex planos: los slices del gráfico no
-// necesitan adaptarse a claro/oscuro (igual que el punto de color de un
-// badge), solo el texto de la leyenda usa tokens de tema.
+// getMembershipStatusColor) pero leyendo directo las variables CSS del tema
+// del dashboard — así un slice del gráfico y su badge correspondiente
+// siempre quedan exactamente del mismo tono, un solo lugar para cambiarlo
+// (app/globals.css).
 const STATUS_COLORS: Record<MembershipStatusLabel, string> = {
-  al_dia: "#10b981",
-  vence_pronto: "#f59e0b",
-  vencido: "#ef4444",
-  sin_plan: "#9ca3af",
+  al_dia: "var(--success)",
+  vence_pronto: "var(--warning)",
+  vencido: "var(--danger)",
+  sin_plan: "var(--muted-foreground)",
 };
 
 const STATUS_ORDER: MembershipStatusLabel[] = ["al_dia", "vence_pronto", "vencido", "sin_plan"];

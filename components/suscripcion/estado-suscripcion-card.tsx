@@ -38,12 +38,12 @@ export function EstadoSuscripcionCard({
 
   if (statusInfo.status === "grace_period") {
     return (
-      <Card className="border-amber-500/50 bg-amber-500/10">
+      <Card className="border-warning/40 bg-warning-subtle">
         <CardContent className="flex items-start gap-3 py-5">
-          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warning" />
           <div>
-            <p className="font-semibold text-amber-900 dark:text-amber-200">Tu prueba venció</p>
-            <p className="text-sm text-amber-800 dark:text-amber-300">
+            <p className="font-semibold text-warning">Tu prueba venció</p>
+            <p className="text-sm text-warning/90">
               Tenés {diasLabel(statusInfo.daysRemaining)} para activar un plan antes de perder
               acceso a Constano.
             </p>
@@ -59,9 +59,9 @@ export function EstadoSuscripcionCard({
       : null;
 
     return (
-      <Card className="border-emerald-500/40 bg-emerald-500/5">
+      <Card className="border-success/40 bg-success-subtle">
         <CardContent className="flex items-center gap-3 py-5">
-          <CheckCircle2 className="size-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <CheckCircle2 className="size-5 shrink-0 text-success" />
           <div>
             <p className="font-medium text-foreground">
               Plan {planName ?? statusInfo.planId} activo

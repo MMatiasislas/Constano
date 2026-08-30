@@ -92,7 +92,7 @@ export default async function AlumnosPage({ searchParams }: PageProps) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Alumnos</h1>
+          <h1 className="text-3xl font-medium tracking-tight">Alumnos</h1>
           <p className="text-muted-foreground">
             {activeCount ?? 0} alumnos activos de {totalCount ?? 0} totales
           </p>

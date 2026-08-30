@@ -66,7 +66,7 @@ export default async function EjerciciosPage({ searchParams }: PageProps) {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Ejercicios</h1>
+          <h1 className="text-3xl font-medium tracking-tight">Ejercicios</h1>
           <p className="text-muted-foreground">Biblioteca de ejercicios para armar rutinas.</p>
         </div>
         <NuevoEjercicioDialog />

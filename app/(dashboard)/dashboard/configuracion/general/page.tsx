@@ -16,7 +16,7 @@ export default async function ConfiguracionGeneralPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">General</h1>
+        <h1 className="text-3xl font-medium tracking-tight">General</h1>
         <p className="text-muted-foreground">Datos generales del gimnasio.</p>
       </div>
 
