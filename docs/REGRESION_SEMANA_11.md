@@ -54,7 +54,7 @@ no vuelve a aparecer solo — `onboarding_seen_at` quedó bien seteado en la DB.
 - Marcar presente → registro creado en `attendances`.
 - Deshacer (vía el chip "Presente" → confirmar) → el registro se borra.
 - **Check-in por QR** (`/checkin/[gymSlug]/scan?token=...`, simulando el escaneo): responde 200, muestra "¡Bienvenido {nombre}! 💪 Entrada registrada a las HH:MM" y crea el registro de asistencia correctamente — mismo resultado que marcar manual.
-- **Hallazgo de UX (no es un bug)**: el buscador de `/dashboard/asistencia` filtra cada campo por separado (`first_name`, `last_name`, `phone`), nunca el nombre completo concatenado. Buscar "Ana Regresion" (nombre + apellido juntos, como screamsería naturalmente cualquier usuario) devuelve **"No encontramos alumnos con esos filtros"** aunque la alumna exista — hay que buscar por un solo campo a la vez ("Ana" o "Regresion" por separado sí funcionan). Vale la pena, como mejora futura, que el filtro también compare contra el nombre completo armado (`first_name || ' ' || last_name`).
+- **Hallazgo de UX — corregido el 2026-08-30**: el buscador de `/dashboard/asistencia` filtraba cada campo por separado (`first_name`, `last_name`, `phone`), nunca el nombre completo concatenado. Buscar "Ana Regresion" (nombre + apellido juntos, como escribiría naturalmente cualquier usuario) devolvía **"No encontramos alumnos con esos filtros"** aunque la alumna existiera — solo funcionaba buscando un campo a la vez ("Ana" o "Regresion" por separado). **Fix**: en `app/(dashboard)/dashboard/asistencia/page.tsx` el filtro ahora compara contra `nombreCompleto(first_name, last_name)` armado en el servidor (PostgREST no permite `ilike` sobre una expresión concatenada en el query string, solo sobre columnas reales, así que el filtro se resuelve en Next después de traer los alumnos activos del gym — un listado por gym es chico, no hace falta que lo resuelva la DB). Verificado en vivo: "Ana Regresion" y "Ana" sola encuentran a la alumna por igual.
 
 ## 6. Retención — ✅ sin hallazgos
 - Regla nueva ("Regla QA 3 días", aplica a todos) creada.
@@ -146,5 +146,3 @@ verificación son los de las secciones 5 (UX) y 7 (bug real) de arriba.
 - No se probó el webhook real de Mercado Pago con un pago de tarjeta de
   prueba completo (requiere dominio público, ya documentado como pendiente
   desde la sesión de suscripciones).
-- El hallazgo de UX del buscador de Asistencia (sección 5) no se corrigió
-  en esta sesión — quedó documentado como mejora futura, no bloqueante.

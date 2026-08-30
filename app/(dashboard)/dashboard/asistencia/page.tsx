@@ -5,14 +5,28 @@ import { QrCodeIcon } from "lucide-react";
 import { getCurrentGymId } from "@/lib/auth/get-gym-id";
 import { createClient } from "@/lib/supabase/server";
 import { getEndOfDayISO, getStartOfDayISO } from "@/lib/attendance";
+import { nombreCompleto } from "@/lib/members";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AsistenciaFiltros } from "@/components/asistencia/asistencia-filtros";
 import { AsistenciaLista } from "@/components/asistencia/asistencia-lista";
-import type { MemberStatus, MemberWithTodayAttendance } from "@/types/db";
+import type { Member, MemberStatus, MemberWithTodayAttendance } from "@/types/db";
 
-function escapeForOr(value: string) {
-  return value.replace(/[%,()]/g, (char) => `\\${char}`);
+// Filtra por nombre completo (first_name + last_name concatenados) además
+// de cada campo por separado, para que buscar "Ana Regresion" encuentre a
+// "Ana Regresion Editada" igual que buscar solo "Ana" o solo "Regresion".
+// PostgREST no permite un `ilike` sobre una expresión concatenada en el
+// query string (solo sobre columnas reales), así que este filtro corre acá
+// del lado del servidor de Next después de traer los alumnos del gym — un
+// listado por gym es chico, no hace falta que lo resuelva la DB.
+function coincideConBusqueda(member: Pick<Member, "first_name" | "last_name" | "phone">, q: string) {
+  const texto = q.trim().toLowerCase();
+  if (!texto) return true;
+
+  const nombreCompletoTexto = nombreCompleto(member.first_name, member.last_name).toLowerCase();
+  const telefono = (member.phone ?? "").toLowerCase();
+
+  return nombreCompletoTexto.includes(texto) || telefono.includes(texto);
 }
 
 function capitalizar(texto: string) {
@@ -32,20 +46,13 @@ export default async function AsistenciaPage({ searchParams }: PageProps) {
 
   const estados: MemberStatus[] = incluirPausados ? ["active", "paused"] : ["active"];
 
-  let query = supabase
+  const query = supabase
     .from("members")
     .select("*, attendances(id, checked_in_at, checked_in_by)")
     .in("status", estados)
     .gte("attendances.checked_in_at", getStartOfDayISO())
     .lt("attendances.checked_in_at", getEndOfDayISO())
     .order("first_name", { ascending: true });
-
-  if (q) {
-    const safeQ = escapeForOr(q);
-    query = query.or(
-      `first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,phone.ilike.%${safeQ}%`
-    );
-  }
 
   const gymId = await getCurrentGymId();
 
@@ -61,7 +68,9 @@ export default async function AsistenciaPage({ searchParams }: PageProps) {
         .in("members.status", estados),
       supabase.from("gyms").select("slug").eq("id", gymId).single(),
     ]);
-  const members = (data ?? []) as MemberWithTodayAttendance[];
+  const members = ((data ?? []) as MemberWithTodayAttendance[]).filter((member) =>
+    coincideConBusqueda(member, q)
+  );
   const presentesHoy = presentesHoyCount ?? 0;
   const gymSlug = gym?.slug ?? "";
 
