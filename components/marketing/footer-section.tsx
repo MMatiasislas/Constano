@@ -3,8 +3,6 @@ import { MessageCircle } from "lucide-react";
 import { whatsappHref } from "@/lib/members";
 import { WHATSAPP_PLACEHOLDER_NUMBER } from "@/lib/marketing";
 
-// PLACEHOLDER: mismo número de lib/marketing.ts — reemplazar antes de
-// producción por el WhatsApp real de contacto.
 const CONTACT_MESSAGE = "Hola! Tengo una consulta sobre Constano.";
 
 export function FooterSection() {

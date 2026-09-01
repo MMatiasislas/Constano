@@ -5,9 +5,6 @@ import { WHATSAPP_PLACEHOLDER_NUMBER } from "@/lib/marketing";
 import { Button } from "@/components/ui/button";
 import { RevealOnScroll } from "./reveal-on-scroll";
 
-// PLACEHOLDER: WHATSAPP_PLACEHOLDER_NUMBER (en lib/marketing.ts) es un número
-// de ejemplo — reemplazarlo por el número real de WhatsApp de Constano antes
-// de ir a producción.
 const CUSTOM_PLAN_MESSAGE =
   "Hola! Mi gimnasio tiene más de 100 alumnos, quiero consultar por un plan a medida en Constano.";
 

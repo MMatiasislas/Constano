@@ -1517,3 +1517,56 @@ igual y quedaron pixel-a-pixel idénticas entre "antes" y "después" (confirmado
 de archivo casi idéntico del PNG, la diferencia mínima es solo no-determinismo de compresión PNG).
 Todos los datos de prueba se borraron al terminar. `tsc --noEmit` y `eslint .` limpios (mismo
 warning preexistente de siempre, no relacionado).
+
+## Auditoría de la landing en producción (2026-09-01)
+
+Primera auditoría corrida contra `https://constano.com` real (no localhost) tras conectar el
+dominio. Checklist completo de 10 puntos en `docs/AUDITORIA_LANDING_PRODUCCION.md` — acá solo el
+resumen de lo que dejó código nuevo o cambiado.
+
+### Bug crítico encontrado: el build de producción estaba roto
+El último push a `main` (`64fa895`, un ajuste manual del número de WhatsApp) dejó
+`lib/marketing.ts` con un string sin cerrar (`"5492235507397.;` en vez de `"5492235507397";`) —
+error de sintaxis de TypeScript, `next build` no podía compilar. Vercel se había quedado sirviendo
+el deploy anterior en silencio (así el sitio se veía bien, pero cualquier cambio nuevo pusheado
+iba a quedar sin publicar sin aviso visible salvo el email de Vercel). Corregido. **Lección**: para
+cualquier edición manual chica directo en el código (no generada por una sesión de Claude), correr
+`npm run build` real antes de pushear a `main` — `tsc --noEmit` sirve pero un build completo es la
+prueba definitiva de que Vercel no va a fallar en silencio.
+
+### Bug real encontrado: `/forgot-password` no existía (404)
+El link de "¿Olvidaste tu contraseña?" en `/login` apuntaba a una página que nunca se había
+construido — quedó pendiente de una sesión muy vieja del proyecto. Se armó el flujo completo:
+- `app/(auth)/forgot-password/page.tsx`: pide el email, `supabase.auth.resetPasswordForEmail()`.
+- `app/(auth)/reset-password/page.tsx`: la página a la que redirige el email — escucha el evento
+  `PASSWORD_RECOVERY` de `onAuthStateChange` (con `getSession()` de red de contención por la
+  carrera posible con el montaje del componente) antes de mostrar el form de contraseña nueva; si
+  no llega nada en 4s, muestra "este link ya no es válido" en vez de romper.
+- **Pendiente manual de Matías**: agregar `https://www.constano.com/reset-password` a Redirect
+  URLs en Supabase Dashboard → Authentication → URL Configuration — sin este paso el link del
+  email fallaría igual en producción, aunque las 2 páginas ya están armadas y verificadas
+  localmente (formulario envía bien, estado de link inválido se maneja bien, sin errores de
+  consola, `npm run build` las genera como rutas estáticas sin problema).
+
+### SEO: robots.txt y sitemap.xml agregados
+Ninguno de los 2 existía (404 ambos). Se agregaron con la convención nativa de Next.js
+(`app/robots.ts`, `app/sitemap.ts`, en vez de archivos estáticos en `public/`) — dominio
+hardcodeado a `https://www.constano.com` a propósito (no `getSiteUrl()`, que cae a
+`NEXT_PUBLIC_SITE_URL`/`VERCEL_URL`/localhost según el entorno, pensada para links funcionales que
+también tienen que andar en preview/local — acá se necesita siempre el dominio canónico real).
+`robots.ts` bloquea `/dashboard`, `/checkin` e `/invitacion` (nada de eso debería indexarse).
+
+### Verificado en producción real con Playwright, no solo local
+Signup completo de punta a punta contra la Supabase real (cuenta de prueba borrada después),
+calculadora de ahorro con drag real de mouse Y de touch (fórmula verificada exacta en 25/150/300
+alumnos), los 6 botones "Empezar/Empezá/Probar gratis" de todo el sitio contados y confirmados
+apuntando a `/comenzar`, responsive en 375/768/1440 sin scroll horizontal no deseado, tabla
+comparativa con scroll horizontal propio confirmado en mobile, certificado SSL válido y los 4
+redirects HTTP→HTTPS (con/sin `www`) terminando siempre en `https://www.constano.com`.
+
+### 2 hallazgos de pulido, documentados pero sin tocar (a propósito)
+1. El validador nativo del navegador (`type="email"`) intercepta con un tooltip en inglés antes
+   que el mensaje en español de Zod cuando el email no tiene ningún "@" — se arreglaría con
+   `noValidate` en el form de `/comenzar`, no se tocó sin confirmar primero.
+2. `public/` todavía tiene los SVG de ejemplo default de Next.js (`file.svg`, `globe.svg`, etc.),
+   no se usan en ningún lado — peso muerto, no rompe nada.
